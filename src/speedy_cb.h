@@ -32,6 +32,7 @@ typedef struct _CopyBuf {
 #define BUF_FULL(buf)	((buf).sz == (buf).maxsz)
 #define BUF_SZ(buf)	((buf).sz)
 #define BUF_EOF(buf)	((buf).eof)
+#define BUF_SETEOF(buf)	(buf).eof = 1
 
 void speedy_cb_alloc(
     CopyBuf *bp, int maxsz, int rdfd, int wrfd, char *buf, int sz

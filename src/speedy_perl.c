@@ -40,7 +40,7 @@ typedef struct {
     HV	*pv_opts;
 } PerlVars;
 
-static PerlInterpreter	*g_perl;	/* Perl interpreter */
+static PerlInterpreter	*my_perl;	/* Perl interpreter */
 static slotnum_t	gslotnum, bslotnum;
 static PerlVars		pv;
 
@@ -98,17 +98,18 @@ static void all_done(int exec_myself) {
     speedy_file_set_state(FS_CLOSED);
 
     /* Call the shutdown handler if present */
-    if (g_perl) {
+    if (my_perl) {
 	SV *sv = perl_get_sv("CGI::SpeedyCGI::_shutdown_handler", 0);
 	if (sv && SvPV(sv, PL_na)[0]) {
 	    dSP;
 	    PUSHMARK(SP);
 	    perl_call_sv(sv, G_DISCARD | G_NOARGS);
 	}
-	perl_destruct(g_perl);
-	perl_free(g_perl);
+	perl_destruct(my_perl);
+	perl_free(my_perl);
     }
     if (exec_myself) {
+	PerlIO_flush(NULL);
 	speedy_util_execvp((speedy_opt_orig_argv()[0]), speedy_opt_orig_argv());
 	remove_from_temp();
     }
@@ -239,7 +240,8 @@ static void onerun(pid_t mypid, int curdir) {
     /* Run the perl code.  Ignore return value since we want to stay persistent
      * no matter what the return code
      */
-    (void) perl_run(g_perl);
+    (void) perl_run(my_perl);
+    speedy_util_time_invalidate();
 
     /* Terminate any forked children */
     if (getpid() != mypid) exit(0);
@@ -268,12 +270,14 @@ static void onerun(pid_t mypid, int curdir) {
     }
 }
 
+
 void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 {
     extern void xs_init();
     int curdir, numrun;
     pid_t mypid = getpid();
     char **perl_argv;
+    char *temp_script_name;
 
     /* Copy into globals */
     gslotnum	= _gslotnum;
@@ -286,21 +290,42 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
     curdir = speedy_util_pref_fd(open(".", O_RDONLY, 0), PREF_FD_CWD);
 
     /* Allocate new perl */
-    if (!(g_perl = perl_alloc())) {
+    if (!(my_perl = perl_alloc()))
 	DIE_QUIET("Cannot allocate perl");
+    perl_construct(my_perl);
+
+    /* If we're setuid, must use a temporary script name of /dev/fd/N */
+    if (speedy_script_getstat()->st_mode & (S_ISUID|S_ISGID)) {
+#       define DEVFD "/dev/fd/%d"
+	temp_script_name = speedy_malloc(sizeof(DEVFD) + 10);
+	sprintf(temp_script_name, DEVFD, speedy_script_open());
+    } else {
+	temp_script_name = NULL;
     }
-    perl_construct(g_perl);
 
     /* Parse perl file. */
-    perl_argv = speedy_opt_perl_argv();
+    perl_argv = speedy_opt_perl_argv(temp_script_name);
     if (
 	perl_parse(
-	    g_perl, xs_init, speedy_util_argc((const char * const *)perl_argv),
+	    my_perl, xs_init, speedy_util_argc((const char * const *)perl_argv),
 	    perl_argv, NULL
 	)
     )
     {
 	DIE_QUIET("perl_parse error");
+    }
+
+    /* If we had to use /dev/fd/N, perl will close the file for us, so
+     * make sure our code knows it's closed.  We shouldn't need it from here on
+     * out, but if we do, it'll have to be re-opened.
+     */
+    speedy_script_close();
+
+    /* If we used a temporary script name, put $0 back to what it should be */
+    if (temp_script_name) {
+	SV *dollar_zero = perl_get_sv("0", 0);
+	if (dollar_zero)
+	    sv_setpv(dollar_zero, speedy_opt_script_argv()[0]);
     }
 
     /* Find perl variables */
@@ -339,7 +364,7 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 	    } else {
 		sv = newSViv((int)o->value);
 	    }
-	    hv_store(pv.pv_opts, o->name, strlen(o->name), sv, 0);
+	    hv_store(pv.pv_opts, o->name, o->name_len, sv, 0);
 	}
     }
 
@@ -392,12 +417,6 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 	/* Make sure we cd back to the correct directory */
 	if (curdir != -1) fchdir(curdir);
 
-	/* See if we've gone over the maxruns */
-	if (OPTVAL_MAXRUNS && numrun >= OPTVAL_MAXRUNS) {
-	    close(curdir);
-	    all_done(1);
-	}
-
 	/* See if we should get new options from the perl script */
 	if (get_pv_opts_changed(0) && get_pv_opts(0)) {
 	    int i;
@@ -406,10 +425,16 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 
 	    for (i = 0; i < SPEEDY_NUMOPTS; ++i) {
 		o = speedy_optdefs + i;
-		if ((sv = hv_fetch(pv.pv_opts, o->name, strlen(o->name), 0))) {
+		if ((sv = hv_fetch(pv.pv_opts, o->name, o->name_len, 0))) {
 		    (void) speedy_opt_set(o, SvPV(*sv, PL_na));
 		}
 	    }
+	}
+
+	/* See if we've gone over the maxruns */
+	if (OPTVAL_MAXRUNS && numrun >= OPTVAL_MAXRUNS) {
+	    close(curdir);
+	    all_done(1);
 	}
     }
 }

@@ -17,11 +17,6 @@
  *
  */
 
-/* Stay out of the way of stdio */
-#define PREF_FD_CONNECT_S	3
-#define PREF_FD_CONNECT_E	4
-#define PREF_FD_FILE		5
-
 /* 
  * Glue
  */
@@ -32,7 +27,6 @@
 #define speedy_free(s)		free(s)
 #define speedy_malloc(n)	malloc(n)
 #define speedy_realloc(s,n)	realloc(s,n)
-#define speedy_strdup(s)	strdup(s)
 #define speedy_execvp(f,a)	execvp(f,(char *const*)a)
 
 void speedy_abort(const char *s);

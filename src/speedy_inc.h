@@ -33,3 +33,7 @@
 #include "speedy_util.h"
 #include "speedy_cb.h"
 #include "speedy_perl.h"
+
+#ifndef MAP_FAILED
+#   define MAP_FAILED (-1)
+#endif

@@ -9,3 +9,8 @@ check_syms
 
     Used by the makefile to check .o files for symbols that shouldn't
     be exported.  Almost all exported symbols should start with "speedy"
+
+
+build_rpms
+
+    Build binary rpms.  Run from the top-level Makefile with "make rpm"

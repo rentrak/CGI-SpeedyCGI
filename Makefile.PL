@@ -6,7 +6,7 @@ use SpeedyMake qw(%write_makefile_common);
 
 WriteMakefile(
     NAME		=> 'CGI::SpeedyCGI',
-    VERSION_FROM	=> 'src/SpeedyCGI.src',
+    VERSION_FROM	=> 'src/SpeedyCGI_src.pm',
     EXE_FILES		=> [qw(speedy/speedy speedy_backend/speedy_backend)],
     CONFIGURE		=> \&get_dir,
     PM			=> {'src/SpeedyCGI.pm'=>'$(INST_LIBDIR)/SpeedyCGI.pm'},
@@ -60,6 +60,12 @@ README: src/SpeedyCGI.pm
 
 README.html: src/SpeedyCGI.pm
 	(cd src; pod2html SpeedyCGI.pm >../README.html; rm -f pod2html*)
-	
+
+rpm: install README README.html
+	./util/build_rpms $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
+
+clean ::
+	rm -f *.rpm
+
 ' . $extra;
 }

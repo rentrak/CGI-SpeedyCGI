@@ -48,6 +48,8 @@ static int got_shbang;
 #define strlist_concat(l, in)	\
 		strlist_concat2((l), (const char * const *)strlist_export(in))
 #define strlist_append(l, s)	strlist_append2(l, s, strlen(s))
+#define strlist_append2(l, s, len)	\
+		strlist_append3((l), speedy_util_strndup((s), (len)))
 
 static void strlist_init(StrList *list) {
     list->malloced = STRLIST_MALLOC;
@@ -70,13 +72,6 @@ static void strlist_setlen(StrList *list, int newlen) {
 static void strlist_append3(StrList *list, char *str) {
     list->ptrs[list->len] = str;
     strlist_setlen(list, list->len + 1);
-}
-
-static void strlist_append2(StrList *list, const char *str, int len) {
-    char *s = speedy_malloc(len+1);
-    speedy_memcpy(s, str, len);
-    s[len] = '\0';
-    strlist_append3(list, s);
 }
 
 static char **strlist_export(StrList *list) {
@@ -137,7 +132,7 @@ static void cmdline_split(
 
     /* Arg-0 */
     if (arg0)
-	*arg0 = speedy_strdup(*in);
+	*arg0 = speedy_util_strdup(*in);
     ++in;
 
     /* Split on spaces */
@@ -170,8 +165,12 @@ int speedy_opt_set(OptRec *optrec, const char *value) {
     if (optrec->type == OTYPE_STR) {
 	if (optrec->changed && optrec->value)
 	    speedy_free(optrec->value);
-	optrec->value = speedy_strdup(value);
-    } else {
+	optrec->value = speedy_util_strdup(value);
+    }
+    else if (optrec->type == OTYPE_TOGGLE) {
+	optrec->value = (void*)!((int)optrec->value);
+    }
+    else {
 	int val = atoi(value);
 
 	switch(optrec->type) {
@@ -231,15 +230,11 @@ static void process_speedy_opts(StrList *speedy_opts, int len) {
 	char *s = strlist_str(speedy_opts, i);
 	char letter = s[1];
 
-	for (j = 0; j < SPEEDY_NUMOPTS; ++j) {
-	    if (speedy_optdefs[j].letter == letter) {
-		speedy_opt_set(speedy_optdefs + j, s+2);
-		break;
-	    }
-	}
-	if (j == SPEEDY_NUMOPTS) {
+	OPTIDX_FROM_LETTER(j, letter)
+	if (j >= 0)
+	    speedy_opt_set(speedy_optdefs + j, s+2);
+	else
 	    DIE_QUIET("Unknown speedy option '-%c'", letter);
-	}
     }
 }
 
@@ -302,6 +297,7 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
     }
     script_argv_loc = strlist_len(&exec_argv);
     strlist_concat(&exec_argv, &script_argv);
+    got_shbang = 0;
 
     /* Copy the environment to exec_envp */
     strlist_concat2(&exec_envp, envp);
@@ -318,50 +314,72 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
 
     strlist_free(&speedy_opts);
     strlist_free(&script_argv);
+
+#   ifdef SPEEDY_VERSION
+	if (OPTVAL_VERSION) {
+	    char buf[200];
+
+	    sprintf(buf,
+	        "SpeedyCGI %s version %s built for perl version 5.%03d_%02d on %s\n",
+	        SPEEDY_PROGNAME, SPEEDY_VERSION, PATCHLEVEL, SUBVERSION, ARCHNAME);
+	    write(2, buf, strlen(buf));
+	    exit(0);
+	}
+#   endif
 }
 
 /* Read the script file for options on the #! line at top. */
 void speedy_opt_read_shbang() {
-    int file_size, fd;
-    char buf[512];
-    const char *fname = speedy_opt_script_argv()[0];
-    char *s, *argv[3], *arg0;
+    int maplen;
+    char *argv[3], *arg0;
     StrList speedy_opts;
+    const char *maddr;
 
-    if (got_shbang || !fname)
+    if (got_shbang)
 	return;
     
     got_shbang = 1;
 
-    if ((fd = open(fname, O_RDONLY, 0600)) != -1) {
-	if ((file_size = read(fd, buf, sizeof(buf))) > 2 &&
-	    buf[0] == '#' && buf[1] == '!')
-	{
-	    /* Null-terminate at end-of-file and/or end-of-line */
-	    buf[file_size-1] = '\0';
-	    if ((s = strchr(buf, '\n')))
-		*s = '\0';
+    maplen = min(speedy_script_getstat()->st_size, 1024);
+	
+    maddr = (const char *)
+	mmap(0, maplen, PROT_READ, MAP_SHARED, speedy_script_open(), 0);
+    if (maddr == (const char *)MAP_FAILED)
+	speedy_util_die("mmap");
 
-	    argv[0] = "";
-	    argv[1] = strchr(buf + 2, ' ');
-	    argv[2] = NULL;
-
-	    /* Split up the command line */
-	    strlist_init(&speedy_opts);
-	    cmdline_split(
-		(const char * const *)argv, &arg0,
-		&perl_argv, &speedy_opts, NULL
-	    );
-
-	    /* Put arg0 into perl_argv[0] */
-	    strlist_replace(&perl_argv, 0, arg0);
-
-	    /* Set our OptRec values based on the speedy opts */
-	    process_speedy_opts(&speedy_opts, strlist_len(&speedy_opts));
-	    strlist_free(&speedy_opts);
+    if (maplen > 2 && maddr[0] == '#' && maddr[1] == '!') {
+	const char *s = maddr + 2, *t;
+	int l = maplen - 2;
+	    
+	/* Find the whitespace after the interpreter command */
+	while (l && !isspace((int)*s)) {
+	    --l; ++s;
 	}
-	close(fd);
+
+	/* Find the newline at the end of the line. */
+	for (t = s; l && *t != '\n'; l--, t++)
+	    ;
+
+	argv[0] = "";
+	argv[1] = speedy_util_strndup(s, t-s);
+	argv[2] = NULL;
+
+	/* Split up the command line */
+	strlist_init(&speedy_opts);
+	cmdline_split(
+	    (const char * const *)argv, &arg0,
+	    &perl_argv, &speedy_opts, NULL
+	);
+
+	/* Put arg0 into perl_argv[0] */
+	strlist_replace(&perl_argv, 0, arg0);
+
+	/* Set our OptRec values based on the speedy opts */
+	process_speedy_opts(&speedy_opts, strlist_len(&speedy_opts));
+	strlist_free(&speedy_opts);
+	speedy_free(argv[1]);
     }
+    (void) munmap((void*) maddr, maplen);
 }
 
 int speedy_opt_got_shbang() {
@@ -372,21 +390,30 @@ void speedy_opt_set_script_argv(const char * const *argv) {
     /* Replace the existing script_argv with this one */
     strlist_setlen(&exec_argv, script_argv_loc);
     strlist_concat2(&exec_argv, argv);
+    got_shbang = 0;
 }
 
 const char * const *speedy_opt_script_argv() {
     return (const char * const *)(strlist_export(&exec_argv) + script_argv_loc);
 }
 
-char **speedy_opt_perl_argv() {
-    static int called_before;
+char **speedy_opt_perl_argv(const char *script_name) {
+    static StrList *full_perl_argv;
 
-    if (!called_before) {
-	/* Append the script argv to the end of perl_argv */
-	strlist_concat2(&perl_argv, speedy_opt_script_argv());
-	called_before = 1;
-    }
-    return strlist_export(&perl_argv);
+    if (full_perl_argv)
+	strlist_free(full_perl_argv);
+    else
+	full_perl_argv = (StrList*)speedy_malloc(sizeof(StrList));
+
+    /* Append the script argv to the end of perl_argv */
+    strlist_init(full_perl_argv);
+    strlist_concat(full_perl_argv, &perl_argv);
+    if (script_name)
+	strlist_append(full_perl_argv, script_name);
+    strlist_concat2(full_perl_argv,
+	speedy_opt_script_argv() + (script_name ? 1 : 0));
+
+    return strlist_export(full_perl_argv);
 }
 
 const char * const *speedy_opt_orig_argv() {

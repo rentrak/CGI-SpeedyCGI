@@ -18,9 +18,10 @@
  */
 
 typedef struct _OptRect {
-    char		*name;
-    char		letter;
-    unsigned char	type;
+    const char		*name;
+    const unsigned char	name_len;
+    const char		letter;
+    const unsigned char	type;
     void		*value;
     char		changed;	/* No longer default */
 } OptRec;
@@ -33,7 +34,7 @@ int speedy_opt_set_byname(const char *optname, const char *value);
 const char *speedy_opt_get(OptRec *optrec);
 void speedy_opt_set_script_argv(const char * const *argv);
 const char * const *speedy_opt_script_argv();
-char **speedy_opt_perl_argv();
+char **speedy_opt_perl_argv(const char *script_name);
 const char * const *speedy_opt_exec_argv();
 const char * const *speedy_opt_exec_envp();
 const char * const *speedy_opt_orig_argv();

@@ -146,6 +146,9 @@ static int cgi_handler(request_rec *r)
     char *argsbuffer, *argv0, *script_argv[2];
     int sendenv_size, alloc_size;
 
+    /* May have been a while since we ran last */
+    speedy_util_time_invalidate();
+
     /* Copy request_rec to global */
     global_r = r;
 
@@ -216,7 +219,7 @@ static int cgi_handler(request_rec *r)
     script_argv[0] = r->filename;
     script_argv[1] = NULL;
     speedy_opt_set_script_argv((const char * const *)script_argv);
-    speedy_frontend_connect(&(r->finfo), &s, &e);
+    speedy_frontend_connect(&s, &e);
 
     /*
      * Open up buffered files -- "s" contains stdin/stdout, "e" is stderr
@@ -278,6 +281,7 @@ static int cgi_handler(request_rec *r)
 	int ret;
 
 	if ((ret = ap_scan_script_header_err_buff(r, script_io, sbuf))) {
+	    speedy_free(argsbuffer);
 	    return ret;
 	}
 
@@ -314,12 +318,14 @@ static int cgi_handler(request_rec *r)
 	    ap_table_unset(r->headers_in, "Content-Length");
 
 	    ap_internal_redirect_handler(location, r);
+	    speedy_free(argsbuffer);
 	    return OK;
 	}
 	else if (location && r->status == 200) {
 	    /* XX Note that if a script wants to produce its own Redirect
 	     * body, it now has to explicitly *say* "Status: 302"
 	     */
+	    speedy_free(argsbuffer);
 	    return REDIRECT;
 	}
 
@@ -341,6 +347,7 @@ static int cgi_handler(request_rec *r)
 	ap_send_fb(script_io, r);
     }
 
+    speedy_free(argsbuffer);
     return OK;			/* NOT r->status, even if it has changed. */
 }
 

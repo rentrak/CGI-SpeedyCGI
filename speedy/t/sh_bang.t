@@ -9,7 +9,7 @@
 
 my $tmp = "/tmp/sh_bang.$$";
 
-print "1..1\n";
+print "1..2\n";
 
 open(F, ">$tmp") || die;
 print F "#!$ENV{SPEEDY} -- -t5 -r2\nprint ++\$x;\n";
@@ -18,12 +18,33 @@ sleep 1;
 chmod 0755, $tmp;
 
 my @nums = map {`$tmp`} (0..3);
+sleep 1;
 unlink($tmp);
 
+my $failed = 0;
 for (my $i = 0; $i < 4; ++$i) {
     if ($nums[$i] != ($i % 2) + 1) {
-	print "failed\n";
-	exit;
+	$failed++;
+	last;
     }
 }
-print "ok\n";
+
+print $failed ? "failed\n" : "ok\n";
+
+my $scr = 't/scripts/sh_bang.2';
+utime time, time, $scr;
+sleep 1;
+
+sub onerun {
+    my $pid = open(F, '-|');
+    if (!$pid) {
+	exec($ENV{SPEEDY}, $scr);
+	exit(1);
+    }
+    $SIG{ALRM} = sub {kill 9, $pid};
+    alarm(3);
+    return scalar <F> =~ /ok/;
+}
+
+&onerun;
+print &onerun ? "ok\n" : "failed\n";

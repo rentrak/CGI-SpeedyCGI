@@ -40,7 +40,7 @@ all: mod_speedycgi.so
 
 #   compile the shared object file
 mod_speedycgi.so: $(CFILES)
-	$(APXS) -c -Wc,-Wall -DMY_NAME="\\\"mod_speedycgi\\\"" -o mod_speedycgi.so $(DEF) $(INC) $(LIB) $(CFILES); ../util/check_syms mod_speedycgi.so
+	$(APXS) -c -Wc,-Wall -DSPEEDY_PROGNAME="\\\"mod_speedycgi\\\"" -o mod_speedycgi.so $(DEF) $(INC) $(LIB) $(CFILES); ../util/check_syms mod_speedycgi.so
 
 #   install the shared object file into Apache 
 install: all

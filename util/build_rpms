@@ -1,0 +1,149 @@
+#!/bin/sh
+
+umask 022
+
+# Args passed in from the Makefile on the command-line
+version=$1;		shift
+INSTALLBIN=$1;		shift
+INSTALLSITELIB=$1;	shift
+
+name=speedycgi
+release=1
+PM=src/SpeedyCGI_src.pm
+
+TOPDIR=/tmp/`basename $0`$$
+RPMS=${TOPDIR}/RPMS
+BUILD=${TOPDIR}/BUILD
+MODULE=`apxs -q LIBEXECDIR`/mod_speedycgi.so
+PREFIX=/usr
+HTTPD_CONF=`apxs -q SYSCONFDIR`/httpd.conf
+perlrev=`rpm -q perl | awk -F- '{print $2}'`
+serial=`echo $version $release | awk '{print $1 * 1000 + $2}'`
+summary=`awk '
+    /head1 NAME/ {in_name = 1}
+    /^[A-z].*/ {
+	if (in_name) {
+	    for (i = 3; i <= NF; ++i) {
+		printf("%s ", $i);
+	    }
+	    print "";
+	    exit;
+	}
+    }
+' ${PM}`
+spec=${TOPDIR}/${name}-${version}-${release}.spec
+apache_desc="Optional module to improve SpeedyCGI performance under Apache"
+group="Development/Languages"
+std_files="${INSTALLBIN}/speedy $INSTALLBIN/speedy_backend $INSTALLSITELIB/CGI/SpeedyCGI.pm"
+doc_files="README README.html COPYING Changes"
+
+# Write to temporary directory TOPDIR 
+trap "rm -rf $TOPDIR; exit 0" 0 1 2 3 15
+rm -rf ${TOPDIR}
+mkdir ${TOPDIR} ${RPMS} ${BUILD}
+
+cp ${doc_files} ${BUILD}
+
+# Start writing the spec file
+(
+cat <<END
+Summary: $summary
+Name: $name
+Version: $version
+Release: $release
+Serial: $serial
+Copyright: GPL
+Group: $group
+Requires: perl = $perlrev
+Prefix: $PREFIX
+URL: http://www.daemoninc.com/SpeedyCGI/
+Vendor: Daemon Consulting Inc.
+%define _topdir $TOPDIR
+BuildRoot: $TOPDIR
+
+%description
+END
+
+# Grab the description from PM file
+awk '
+    /^=head1/ {if (doit) { exit} }
+    {if (doit) {print}}
+    /^=head1 DESCRIPTION/ {doit = 1}
+' $PM |
+sed 's/^/\: /'
+
+cat <<END
+%install
+find $std_files $MODULE -depth -print | cpio -pmd \$RPM_BUILD_ROOT
+
+%files
+END
+for f in $std_files; do echo $f; done
+for f in $doc_files; do echo "%doc $f"; done
+
+cat <<END
+%package apache
+Summary: $apache_desc
+Group: $group
+Requires: speedycgi = ${version}, apache
+
+%description apache
+$apache_desc
+
+%files apache
+$MODULE
+
+%post apache
+PREFIX=$PREFIX
+MODULE=$MODULE
+HTTPD_CONF=${HTTPD_CONF}
+END
+
+cat <<'END'
+# Get relocated module
+MODULE=`echo $MODULE | sed s+^${PREFIX}+${RPM_INSTALL_PREFIX}+`
+(
+    cat ${HTTPD_CONF}
+    grep "/^LoadModule.*mod_speedycgi.so/" ${HTTPD_CONF} >/dev/null
+    if test $? -ne 0; then
+	echo "LoadModule speedycgi_module $MODULE"
+    fi
+    grep "/^AddModule.*mod_speedycgi/" ${HTTPD_CONF} >/dev/null
+    if test $? -ne 0; then
+	echo "AddModule mod_speedycgi.c"
+    fi
+) >${HTTPD_CONF}.$$
+
+cmp ${HTTPD_CONF} ${HTTPD_CONF}.$$ >/dev/null
+if test $? -ne 0 -a -s ${HTTPD_CONF}.$$; then
+    mv -f ${HTTPD_CONF} ${HTTPD_CONF}.rpmsave
+    mv -f ${HTTPD_CONF}.$$ ${HTTPD_CONF}
+    echo ${HTTPD_CONF} was updated - please restart httpd
+else
+    rm -f ${HTTPD_CONF}.$$
+fi
+END
+
+cat <<END
+
+%preun apache
+HTTPD_CONF=${HTTPD_CONF}
+END
+
+cat <<'END'
+sed -e '/^LoadModule.*mod_speedycgi.so/d' -e '/^AddModule.*mod_speedycgi/d' \
+    ${HTTPD_CONF} >${HTTPD_CONF}.$$
+if test -s ${HTTPD_CONF}.$$; then
+    mv -f ${HTTPD_CONF}.$$ ${HTTPD_CONF}
+    echo ${HTTPD_CONF} was updated - please restart httpd
+else
+    rm -f ${HTTPD_CONF}.$$
+fi
+END
+) >$spec
+
+# Build the rpms from the spec
+rpm -bb $spec
+
+# Copy the rpms from the TOPDIR
+cp ${RPMS}/*/*.rpm .

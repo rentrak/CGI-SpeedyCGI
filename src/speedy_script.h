@@ -17,6 +17,8 @@
  *
  */
 
-void speedy_script_stat(const struct stat *stbuf);
 void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p);
 int speedy_script_changed();
+void speedy_script_close();
+int speedy_script_open();
+struct stat *speedy_script_getstat();

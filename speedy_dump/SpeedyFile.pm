@@ -10,7 +10,7 @@ sub new { my($class, $fname) = @_;
 
 sub fname { my $self = shift;
     $self->{fname} ||=
-	sprintf('%s.1.%x.F', ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
+	sprintf('%s.2.%x.F', ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
 }
 
 sub data { my $self = shift;

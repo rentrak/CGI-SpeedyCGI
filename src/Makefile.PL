@@ -28,8 +28,8 @@ print M <<END;
 
 all: ${gen}
 
-${gen}: optdefs optdefs.pl SpeedyCGI.src
-	perl optdefs.pl \$(SPEEDY_INSTALL_BIN)
+${gen}: optdefs optdefs.pl SpeedyCGI_src.pm
+	perl -w optdefs.pl \$(SPEEDY_INSTALL_BIN)
 
 clean:
 	rm -f ${gen} Makefile

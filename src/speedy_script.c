@@ -19,38 +19,53 @@
 
 #include "speedy.h"
 
-static struct stat script_stat;
+static struct stat	script_stat;
+static int		script_fd;
+static time_t		last_open;
 
-static void do_stat() {
-    const char *fname = speedy_opt_script_argv()[0];
-
-    if (!fname) {
-	DIE_QUIET("Missing script filename");
-    }
-
-    if (stat(fname, &script_stat) == -1)
-	speedy_util_die(fname);
+void speedy_script_close() {
+    if (last_open)
+	close(script_fd);
+    last_open = 0;
 }
 
-void speedy_script_stat(const struct stat *stbuf) {
-    if (stbuf) {
-	speedy_memcpy(&script_stat, stbuf, sizeof(script_stat));
-    } else {
-	do_stat();
+int speedy_script_open() {
+    time_t now = speedy_util_time();
+    const char *fname;
+
+    if (!last_open || now - last_open > OPTVAL_RESTATTIMEOUT) {
+
+	speedy_script_close();
+
+	if (!(fname = speedy_opt_script_argv()[0]))
+	    DIE_QUIET("Missing script filename");
+
+	if ((script_fd = open(fname, O_RDONLY)) == -1)
+	    speedy_util_die(fname);
+
+	(void) fstat(script_fd, &script_stat);
+	last_open = now;
     }
+    return script_fd;
 }
 
 int speedy_script_changed() {
     struct stat stbuf;
 
+    if (!last_open)
+	return 0;
     speedy_memcpy(&stbuf, &script_stat, sizeof(script_stat));
-    do_stat();
+    (void) speedy_script_open();
     return
 	stbuf.st_mtime != script_stat.st_mtime ||
 	stbuf.st_ino != script_stat.st_ino ||
 	stbuf.st_dev != script_stat.st_dev;
 }
 
+struct stat *speedy_script_getstat() {
+    speedy_script_open();
+    return &script_stat;
+}
 
 void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
     slotnum_t gslotnum, sslotnum;
@@ -59,35 +74,26 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
 
     /* Find the slot for this script in the file */
     speedy_file_set_state(FS_LOCKED);
-    while (1) {
-	for (gslotnum = FILE_HEAD.group_head, sslotnum = 0; gslotnum;
-	     gslotnum = gslot->next_slot)
-	{
-	    gslot = &FILE_SLOT(gr_slot, gslotnum);
+    for (gslotnum = FILE_HEAD.group_head, sslotnum = 0; gslotnum;
+         gslotnum = gslot->next_slot)
+    {
+	gslot = &FILE_SLOT(gr_slot, gslotnum);
 
-	    if (speedy_group_isvalid(gslotnum)) {
+	if (speedy_group_isvalid(gslotnum)) {
 
-		for (sslotnum = gslot->script_head; sslotnum;
-		     sslotnum = sslot->next_slot)
+	    for (sslotnum = gslot->script_head; sslotnum;
+		 sslotnum = sslot->next_slot)
+	    {
+		sslot = &FILE_SLOT(scr_slot, sslotnum);
+		if (sslot->dev_num == script_stat.st_dev &&
+		    sslot->ino_num == script_stat.st_ino)
 		{
-		    sslot = &FILE_SLOT(scr_slot, sslotnum);
-		    if (sslot->dev_num == script_stat.st_dev &&
-			sslot->ino_num == script_stat.st_ino)
-		    {
-			break;
-		    }
+		    break;
 		}
-		if (sslotnum) break;
 	    }
+	    if (sslotnum)
+		break;
 	}
-
-	if (sslotnum || speedy_opt_got_shbang())
-	    break;
-	
-	/* Read the shbang line from the file.  Might hang, so unlock first */
-	speedy_file_set_state(FS_OPEN);
-	speedy_opt_read_shbang();
-	speedy_file_set_state(FS_LOCKED);
     }
 
     /* If mtime has changed, throw away this group */

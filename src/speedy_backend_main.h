@@ -27,7 +27,6 @@
 
 void *speedy_malloc(int n);
 void *speedy_realloc(void *ptr, size_t size);
-char *speedy_strdup(const char *s);
 
 /* Our preferred file descriptors */
 

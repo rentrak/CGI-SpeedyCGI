@@ -16,6 +16,8 @@ if test ! -f $SPEEDY_BACKENDPROG; then
     echo Warning! Cannot locate $SPEEDY_BACKENDPROG
 fi
 
+SPEEDY_MAXRUNS=0
+export SPEEDY_MAXRUNS
 
 numruns=600
 

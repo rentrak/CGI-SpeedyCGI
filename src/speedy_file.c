@@ -21,7 +21,7 @@
 
 #include "speedy.h"
 
-file_t			*speedy_file_maddr;
+speedy_file_t		*speedy_file_maddr;
 static int		file_fd = -1;
 static int		fd_is_suspect;
 static int		maplen;
@@ -30,7 +30,6 @@ static char		*file_name;
 static struct stat	file_stat;
 static int		cur_state;
 static time_t		last_reopen;
-static struct timeval	file_create_time;
 
 #define fillin_fl(fl)		\
     fl.l_whence	= SEEK_SET;	\
@@ -50,10 +49,10 @@ static void file_map(unsigned int len) {
 	file_unmap();
 	maplen = len;
 	if (len) {
-	    speedy_file_maddr = (file_t*)mmap(
+	    speedy_file_maddr = (speedy_file_t*)mmap(
 		0, len, PROT_READ | PROT_WRITE, MAP_SHARED, file_fd, 0
 	    );
-	    if (speedy_file_maddr == (file_t*)MAP_FAILED)
+	    if (speedy_file_maddr == (speedy_file_t*)MAP_FAILED)
 		speedy_util_die("mmap failed");
 	}
     }
@@ -74,9 +73,8 @@ static void file_unlock() {
 
 /* Only call this if you're sure the fd is not suspect */
 static void file_close2() {
-    if (fd_is_suspect) {
+    if (fd_is_suspect)
 	DIE_QUIET("file_close2: assertion failed - fd_is_suspect");
-    }
 
     file_unlock();
     file_unmap();
@@ -116,6 +114,7 @@ static void remove_file() {
 }
 
 static void file_lock() {
+    static struct timeval file_create_time;
     struct flock fl;
     int tries = 5;
     time_t now;
@@ -125,7 +124,7 @@ static void file_lock() {
     fix_suspect_fd();
 
     /* Re-open the temp file occasionally */
-    if ((now = time(NULL)) - last_reopen > OPTVAL_RESTATTIMEOUT) {
+    if ((now = speedy_util_time()) - last_reopen > OPTVAL_RESTATTIMEOUT) {
 	last_reopen = now;
 	file_close2();
     }
@@ -133,12 +132,8 @@ static void file_lock() {
     while (tries--) {
 	/* If file is not open, open it */
 	if (file_fd == -1) {
-	    if (!file_name) {
-		file_name = speedy_malloc(strlen(OPTVAL_TMPBASE) + 64);
-		sprintf(file_name, "%s.%c.%x.F",
-		    OPTVAL_TMPBASE, FILE_REV, speedy_util_geteuid()
-		);
-	    }
+	    if (!file_name)
+		file_name = speedy_util_fname(FILE_REV, 'F');
 	    file_fd = speedy_util_pref_fd(
 		open(file_name, O_RDWR | O_CREAT, 0600), PREF_FD_FILE
 	    );
@@ -169,17 +164,16 @@ static void file_lock() {
 
 	/* Initialize file's create time if necessary */
 	if (!FILE_HEAD.create_time.tv_sec)
-	    (void) gettimeofday(&(FILE_HEAD.create_time), NULL);
+	    speedy_util_gettimeofday(&(FILE_HEAD.create_time));
 
 	/* Initialize our copy of the create-time if necessary */
-	if (!file_create_time.tv_sec) {
+	if (!file_create_time.tv_sec || cur_state < FS_HAVESLOTS) {
 	    file_create_time.tv_sec  = FILE_HEAD.create_time.tv_sec;
 	    file_create_time.tv_usec = FILE_HEAD.create_time.tv_usec;
 	}
-	/* Check whether this file is a different file */
-	else if (cur_state >= FS_HAVESLOTS &&
-	    (file_create_time.tv_sec  != FILE_HEAD.create_time.tv_sec ||
-	     file_create_time.tv_usec != FILE_HEAD.create_time.tv_usec))
+	/* Check whether this file is a different version  */
+	else if ((file_create_time.tv_sec  != FILE_HEAD.create_time.tv_sec ||
+	          file_create_time.tv_usec != FILE_HEAD.create_time.tv_usec))
 	{
 	    DIE_QUIET("temp file is corrupt");
 	}
@@ -234,11 +228,9 @@ void speedy_file_set_state(int new_state) {
     switch(new_state) {
     case FS_CLOSED:
 	file_close();
-	file_create_time.tv_sec = 0;
 	break;
     case FS_OPEN:
 	file_unlock();
-	file_create_time.tv_sec = 0;
 	break;
     case FS_HAVESLOTS:
 	file_unlock();

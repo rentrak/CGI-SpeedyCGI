@@ -175,24 +175,16 @@ void speedy_backend_check_next(slotnum_t gslotnum, slotnum_t bslotnum) {
     speedy_backend_check(gslotnum, bslotnum);
 }
 
-slotnum_t speedy_backend_create_slot(slotnum_t gslotnum, pid_t pid) {
+slotnum_t speedy_backend_create_slot(slotnum_t gslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
     be_slot_t *bslot;
-    slotnum_t next_slot, bslotnum, front;
-
-    /* Try to find our pid in the existing slots */
-    for (bslotnum = gslot->be_head; bslotnum; bslotnum = next_slot) {
-	bslot = &FILE_SLOT(be_slot, bslotnum);
-	if (bslot->pid == pid)
-	    return bslotnum;
-	next_slot = bslot->next_slot;
-    }
+    slotnum_t bslotnum, front;
 
     /* Create our backend slot */
     bslotnum = speedy_slot_alloc();
     bslot = &FILE_SLOT(be_slot, bslotnum);
-    bslot->pid = pid;
-    bslot->maturity = bslot->be_wait_next = bslot->be_wait_prev = 0;
+    bslot->pid = bslot->maturity = bslot->be_wait_next = bslot->be_wait_prev =
+	0;
 
     /* Put our slot onto the group's be list */
     if ((front = gslot->be_head)) {

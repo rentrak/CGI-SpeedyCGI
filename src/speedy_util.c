@@ -19,6 +19,8 @@
 
 #include "speedy.h"
 
+static struct timeval saved_time;
+
 int speedy_util_pref_fd(int oldfd, int newfd) {
     if (oldfd != newfd && oldfd != -1 && newfd != -1) {
 	(void) dup2(oldfd, newfd);
@@ -29,10 +31,26 @@ int speedy_util_pref_fd(int oldfd, int newfd) {
     }
 }
 
+static int euid = -1;
+
 int speedy_util_geteuid() {
-    static int euid = -1;
-    if (euid == -1) euid = geteuid();
+    if (euid == -1)
+	euid = geteuid();
     return euid;
+}
+
+int speedy_util_seteuid(int id) {
+    int retval = seteuid(id);
+    if (retval != -1)
+	euid = id;
+    return retval;
+}
+
+int speedy_util_getuid() {
+    static int uid = -1;
+    if (uid == -1)
+	uid = getuid();
+    return uid;
 }
 
 int speedy_util_argc(const char * const * argv) {
@@ -52,21 +70,35 @@ int speedy_util_kill(pid_t pid, int sig) {
     return (pid && pid != speedy_util_getpid()) ? kill(pid, sig) : 0;
 }
 
-void speedy_util_die(const char *fmt, ...) {
+static void just_die(const char *fmt, va_list ap) {
     extern int errno;
     char buf[2048];
-    va_list ap;
 
-    sprintf(buf, "%s[%d]: ", MY_NAME, (int)getpid());
-    va_start(ap, fmt);
+    sprintf(buf, "%s[%d]: ", SPEEDY_PROGNAME, (int)getpid());
     vsprintf(buf + strlen(buf), fmt, ap);
-    va_end(ap);
     if (errno) {
 	strcat(buf, ": ");
 	strcat(buf, strerror(errno));
     }
     strcat(buf, "\n");
     speedy_abort(buf);
+}
+
+void speedy_util_die(const char *fmt, ...) {
+    va_list ap;
+
+    va_start(ap, fmt);
+    just_die(fmt, ap);
+    va_end(ap);
+}
+
+void speedy_util_die_quiet(const char *fmt, ...) {
+    va_list ap;
+
+    errno = 0;
+    va_start(ap, fmt);
+    just_die(fmt, ap);
+    va_end(ap);
 }
 
 int speedy_util_execvp(const char *filename, const char *const *argv) {
@@ -77,4 +109,40 @@ int speedy_util_execvp(const char *filename, const char *const *argv) {
 
     /* Exec the backend */
     return speedy_execvp(filename, argv);
+}
+
+char *speedy_util_strndup(const char *s, int len) {
+    char *buf = speedy_malloc(len+1);
+    speedy_memcpy(buf, s, len);
+    buf[len] = '\0';
+    return buf;
+}
+
+void speedy_util_gettimeofday(struct timeval *tv) {
+    if (!saved_time.tv_sec)
+	gettimeofday(&saved_time, NULL);
+    tv->tv_sec = saved_time.tv_sec;
+    tv->tv_usec = saved_time.tv_usec;
+}
+
+time_t speedy_util_time() {
+    struct timeval tv;
+    speedy_util_gettimeofday(&tv);
+    return tv.tv_sec;
+}
+
+void speedy_util_time_invalidate() {
+    saved_time.tv_sec = 0;
+}
+
+char *speedy_util_fname(int num, char type) {
+    char *fname = (char*) speedy_malloc(strlen(OPTVAL_TMPBASE) + 80);
+    int uid = speedy_util_getuid(), euid = speedy_util_geteuid();
+
+    if (euid == uid)
+	sprintf(fname, "%s.%x.%x.%c", OPTVAL_TMPBASE, num, euid, type);
+    else
+	sprintf(fname, "%s.%x.%x.%x.%c", OPTVAL_TMPBASE, num, euid, uid, type);
+
+    return fname;
 }

@@ -30,11 +30,7 @@ static PollInfo listener_pi;
 #endif
 
 static char *get_fname(slotnum_t slotnum, int do_unlink) {
-    char *fname;
-    fname = (char*) speedy_malloc(strlen(OPTVAL_TMPBASE) + 64);
-    sprintf(fname, "%s.%x.%x.S",
-	OPTVAL_TMPBASE, (int)slotnum, speedy_util_geteuid()
-    );
+    char *fname = speedy_util_fname(slotnum, 'S');
     if (do_unlink)
 	unlink(fname);
     return fname;
@@ -47,9 +43,8 @@ static void make_sockname(
     char *fname = get_fname(slotnum, do_unlink);
     speedy_bzero(sa, sizeof(*sa));
     sa->sun_family = AF_UNIX;
-    if (strlen(fname)+1 > sizeof(sa->sun_path)) {
+    if (strlen(fname)+1 > sizeof(sa->sun_path))
 	DIE_QUIET("Socket path %s is too long", fname);
-    }
     strcpy(sa->sun_path, fname);
     speedy_free(fname);
 }
@@ -61,8 +56,10 @@ static int make_sock(int pref_fd) {
 	fd = speedy_util_pref_fd(socket(AF_UNIX, SOCK_STREAM, 0), pref_fd);
 	if (fd != -1)
 	    return fd;
-	else if (NO_BUFSPC(errno))
+	else if (NO_BUFSPC(errno)) {
 	    sleep(1);
+	    speedy_util_time_invalidate();
+	}
 	else
 	    break;
     }
@@ -112,16 +109,24 @@ void speedy_ipc_listen(slotnum_t slotnum) {
 
 void speedy_ipc_listen_fixfd(slotnum_t slotnum) {
     struct stat stbuf;
-    int status, test1, test2;
 
     /* Odd compiler bug - Solaris 2.7 plus gcc 2.95.2, can't put all of
      * this into one big "if" statment - returns false constantly.  Probably
      * has something to do with 64-bit values in st_dev/st_ino
+     * 2.7 bug was found on sparc. Bug does not exist on Solaris-8/intel.
      */
+#ifdef WANT_SOLARIS_BUG
+    if ((fstat(listener, &stbuf) == -1) ||
+	(stbuf.st_dev != listener_stbuf.st_dev) ||
+	(stbuf.st_ino != listener_stbuf.st_ino))
+#else
+    int status, test1, test2;
     status = fstat(listener, &stbuf);
     test1 = stbuf.st_dev != listener_stbuf.st_dev;
     test2 = stbuf.st_ino != listener_stbuf.st_ino;
-    if (status == -1 || test1 || test2) {
+    if (status == -1 || test1 || test2)
+#endif
+    {
 	close(listener);
 	speedy_ipc_listen(slotnum);
     }
@@ -162,9 +167,13 @@ static int do_accept(int pref_fd) {
 }
 
 int speedy_ipc_accept_ready(int wakeup) {
+    int retval;
+
     speedy_poll_reset(&listener_pi);
     speedy_poll_set(&listener_pi, listener, SPEEDY_POLLIN);
-    return speedy_poll_wait(&listener_pi, wakeup) > 0;
+    retval = speedy_poll_wait(&listener_pi, wakeup) > 0;
+    speedy_util_time_invalidate();
+    return retval;
 }
 
 int speedy_ipc_accept(int wakeup, int *s, int *e) {

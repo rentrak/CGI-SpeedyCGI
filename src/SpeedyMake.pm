@@ -168,7 +168,7 @@ sub optdefs_cmds { my($class, $dir) = @_;
     $dir ||= '../src';
     my $gen = join(' ', map {"$dir/$_"} @src_generated);
     "
-${gen}: $dir/Makefile
+${gen}: $dir/Makefile $dir/SpeedyCGI_src.pm
 	cd $dir; \$(MAKE) SPEEDY_INSTALL_BIN=\$(INSTALLBIN)
 
 $dir/Makefile: $dir/Makefile.PL
@@ -182,8 +182,8 @@ sub write_makefile { my $class = shift;
 	MAP_TARGET	=> $class->my_name_full,
 	OBJECT		=> join(' ', $class->src_files_o),
 	INC		=> '-I../src -I.',
-	VERSION_FROM	=> '../src/SpeedyCGI.src',
-	DEFINE		=> "-DMY_NAME=\\\"" . $class->my_name_full . "\\\"",
+	VERSION_FROM	=> '../src/SpeedyCGI_src.pm',
+	DEFINE		=> "-DSPEEDY_PROGNAME=\\\"" . $class->my_name_full . "\\\" -DSPEEDY_VERSION=\\\"\$(VERSION)\\\"",
 	PM		=> {},
 	%write_makefile_common
     );
@@ -256,7 +256,7 @@ sub makeaperl { my $class = shift;
 all :: $my_name
 
 ${my_name}: \$(OBJECT)
-	rm -f ${my_name}; \$(LD) -o ${my_name} \$(OBJECT) $ldopts; ../util/check_syms; echo ''
+	rm -f ${my_name}; \$(LD) -o ${my_name} \$(OBJECT) $ldopts && ../util/check_syms && echo ''
     ";
 }
 

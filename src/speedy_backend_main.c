@@ -23,22 +23,45 @@
 
 #include "speedy.h"
 
+/* Find our existing slot, or create a new one if not found in file
+ */
+static slotnum_t get_slot(slotnum_t gslotnum, pid_t pid) {
+    gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
+    be_slot_t *bslot;
+    slotnum_t next_slot, bslotnum;
+
+    /* Try to find our pid in the existing slots */
+    for (bslotnum = gslot->be_head; bslotnum; bslotnum = next_slot) {
+	bslot = &FILE_SLOT(be_slot, bslotnum);
+	if (bslot->pid == pid)
+	    return bslotnum;
+	next_slot = bslot->next_slot;
+    }
+
+    /* Create a new backend slot and write our pid there */
+    bslotnum = speedy_backend_create_slot(gslotnum);
+    FILE_SLOT(be_slot, bslotnum).pid = pid;
+
+    return bslotnum;
+}
+
 int main(int argc, char **argv, char **_junk) {
     extern char **environ;
     slotnum_t gslotnum, sslotnum, bslotnum;
     int i;
 
-    /* Initialize options */
-    speedy_opt_init((const char * const *)argv, (const char * const *)environ);
-    speedy_opt_read_shbang();
-
     /* Close off all I/O except for stderr (close it later) */
     for (i = 32; i >= 0; --i) {
-	if (i != 2 && i != PREF_FD_LISTENER) close(i);
+	if (i != 2 && i != PREF_FD_LISTENER)
+	    (void) close(i);
     }
+
+    /* Initialize options */
+    speedy_opt_init((const char * const *)argv, (const char * const *)environ);
     
-    /* Stat the script - this could hang */
-    speedy_script_stat(NULL);
+    /* Open/Stat the script - this could hang */
+    (void) speedy_script_open();
+    speedy_opt_read_shbang();
 
     /* Lock/mmap our temp file */
     speedy_file_set_state(FS_LOCKED);
@@ -49,7 +72,7 @@ int main(int argc, char **argv, char **_junk) {
     speedy_file_set_state(FS_WRITING);
 
     /* Get a backend slot */
-    bslotnum = speedy_backend_create_slot(gslotnum, speedy_util_getpid());
+    bslotnum = get_slot(gslotnum, speedy_util_getpid());
 
     /* Done with the temp file for now */
     speedy_file_set_state(FS_HAVESLOTS);
@@ -73,18 +96,4 @@ void *speedy_malloc(int n) {
 void *speedy_realloc(void *ptr, size_t size) {
     Renew(ptr, size, char);
     return ptr;
-}
-
-/*
-void speedy_abort(const char *s) {
-    PerlIO_puts(PerlIO_stderr(), s);
-    exit(1);
-}
-*/
-
-char *speedy_strdup(const char *s) {
-    int l = strlen(s) + 1;
-    char *buf = speedy_malloc(l);
-    speedy_memcpy(buf,s,l);
-    return buf;
 }

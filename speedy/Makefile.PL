@@ -27,4 +27,10 @@ sub my_name {'speedy'}
 sub my_name_full {'speedy'}
 sub src_files_extra {'cb'}
 
+sub get_ldopts {
+    my $x = shift->SUPER::get_ldopts;
+    $x =~ s/\s*-lperl\s*/ /g;
+    return $x;
+}
+
 SpeedyMake::speedy->init->write_makefile;

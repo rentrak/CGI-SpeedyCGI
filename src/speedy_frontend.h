@@ -17,7 +17,7 @@
  *
  */
 
-void speedy_frontend_connect(const struct stat *stbuf, int *s, int *e);
+void speedy_frontend_connect(int *s, int *e);
 void speedy_frontend_dispose(slotnum_t gslotnum, slotnum_t fslotnum);
 char *speedy_frontend_mkenv(
     const char * const * envp, const char * const * scr_argv,

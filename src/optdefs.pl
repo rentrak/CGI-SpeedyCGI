@@ -31,14 +31,14 @@ my %context = (
     frontend		=>[qw(speedy mod_speedycgi)],
 );
 
-my %type = (
-    whole	=>0,
-    natural	=>0,
-    int		=>0,
-    str		=>1,
+my %ctype = (
+    whole	=>'int',
+    natural	=>'int',
+    int		=>'int',
+    toggle	=>'int',
+    str		=>'char*',
 );
-my @type = sort keys %type;
-my %cast = map {$_, $type{$_} ? 'char*' : 'int'} (keys %type);
+my @type = sort keys %ctype;
 
 my $INFILE	= "optdefs";
 my $INSTALLBIN	= shift;
@@ -57,7 +57,7 @@ while (<F>) {
     if (/\S/) {
 	chop;
 	s/\$INSTALLBIN/$INSTALLBIN/g;
-	split(' ', $_, 2);
+	@_ = split(' ', $_, 2);
 	next if @_ < 2;
 	if ($startnew) {
 	    push(@options, $curopt = {});
@@ -78,7 +78,7 @@ for (my $i = 0; $i <= $#options; ++$i) {
     if (!$opt->{option}) {
 	die sprintf("Missing option name in entry #%d in $INFILE file\n", $i+1);
     }
-    if (!grep {lc($opt->{type}) eq $_} keys %type) {
+    if (!grep {lc($opt->{type}) eq $_} @type) {
 	die "Bad type $opt->{type} for option entry $opt->{option}\n";
     }
     
@@ -107,12 +107,13 @@ for (my $i = 0; $i <= $#options; ++$i) {
 print "\n#include \"speedy.h\"\n\n";
 print "OptRec speedy_optdefs[] = {\n";
 foreach my $opt (@options) {
-    printf "    {\n\t\"%s\",\n\t'%s',\n\tOTYPE_%s,\n\t(void*)%s,\n\t%d\n    },\n",
+    printf "    {\n\t\"%s\",\n\t%d,\n\t'%s',\n\tOTYPE_%s,\n\t(void*)%s,\n\t%d\n    },\n",
 	uc($opt->{option}),
+	length($opt->{option}),
 	$opt->{letter} || "\\0",
 	uc($opt->{type}),
 	defined($opt->{defval})
-	    ? ($type{$opt->{type}} ? "\"$opt->{defval}\"" : $opt->{defval})
+	    ? ($ctype{$opt->{type}} eq 'char*' ? "\"$opt->{defval}\"" : $opt->{defval})
 	    : 0,
     ;
 }
@@ -123,8 +124,7 @@ print "};\n";
 #
 &open_file('speedy_optdefs.h');
 for (my $i = 0; $i <= $#type; ++$i) {
-    my $type = $type[$i];
-    printf "#define OTYPE_%s %d\n", uc($type), $i;
+    printf "#define OTYPE_%s %d\n", uc($type[$i]), $i;
 }
 printf "\n#define SPEEDY_NUMOPTS %d\n\n", scalar @options;
 for (my $i = 0; $i <= $#options; ++$i) {
@@ -132,12 +132,23 @@ for (my $i = 0; $i <= $#options; ++$i) {
     my $nm = uc($opt->{option});
 
     printf "#define OPTVAL_%s ((%s)speedy_optdefs[%d].value)\n",
-	$nm, $cast{$opt->{type}}, $i;
+	$nm, $ctype{$opt->{type}}, $i;
     printf "#define OPTIDX_%s %d\n", $nm, $i;
     printf "#define OPTREC_%s speedy_optdefs[%d]\n", $nm, $i;
 }
 print "\n";
 print "extern OptRec speedy_optdefs[SPEEDY_NUMOPTS];\n\n";
+print "#define OPTIDX_FROM_LETTER(var, letter) switch(letter) {\\\n";
+for (my $i = 0; $i <= $#options; ++$i) {
+    my $opt = $options[$i];
+
+    if ($opt->{letter}) {
+	printf "    case '%s': var = $i; break;\\\n", $opt->{letter}, $i;
+    }
+}
+print "    default: var = -1; break;}\n\n";
+    
+
 
 #
 # Write mod_speedycgi_cmds.c
@@ -158,7 +169,7 @@ print "{NULL}\n};\n";
 # Write SpeedyCGI.pm
 #
 &open_file('SpeedyCGI.pm', 1);
-open(I, "<SpeedyCGI.src") || die "SpeedyCGI.src: $!\n";
+open(I, '<SpeedyCGI_src.pm') || die "SpeedyCGI_src.pm: $!\n";
 $columns = 54; # For the wrap function
 while (<I>) {
     if (/INSERT_OPTIONS_POD_HERE/) {
@@ -166,15 +177,19 @@ while (<I>) {
 	    next unless $opt->{context};
 	    my $cmdline = 'N/A';
 	    if ($opt->{letter}) {
-		$cmdline = sprintf("-%s%s",
-		    $opt->{letter}, $type{$opt->{type}} ? 'str' : 'N'
-		);
+		my $arg = '';
+		if ($opt->{type} ne 'toggle') {
+		    $arg = $ctype{$opt->{type}} eq 'char*' ? 'str' : 'N'
+		}
+		$cmdline = sprintf("-%s%s", $opt->{letter}, $arg);
 	    }
 	    printf "=item %s\n\n", $opt->{option};
 	    printf "    Command Line    : %s\n", $cmdline;
-	    printf "    Default Value   : %s%s\n",
-	       defined($opt->{defval}) ? $opt->{defval} : '',
-	       defined($opt->{defdesc}) ? " ($opt->{defdesc})" : '';
+	    if ($opt->{type} ne 'toggle') {
+		printf "    Default Value   : %s%s\n",
+		   defined($opt->{defval}) ? $opt->{defval} : '',
+		   defined($opt->{defdesc}) ? " ($opt->{defdesc})" : '';
+	    }
 	    printf "    Context         : %s\n",
 		join(', ', sort keys %{$opt->{context}});
 	    printf "\n";

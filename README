@@ -69,9 +69,9 @@ OPTIONS
 
                 #!/usr/bin/speedy -w -- -t300
 
-        at the top of your script will call SpeedyCGI with the perl option
-        "`-w'" and will pass the "`-t'" option to speedy, setting the
-        Timeout to 300 seconds.
+        at the top of your script will set the perl option "`-w'" and will
+        pass the "`-t'" option to SpeedyCGI, setting the Timeout value to
+        300 seconds.
 
     Environment
         Environment variables can be used to pass in options. This can only
@@ -154,7 +154,7 @@ OPTIONS
 
     MaxRuns
             Command Line    : -rN
-            Default Value   : 0 (no max)
+            Default Value   : 500
             Context         : mod_speedycgi, module, speedy
 
             Description:
@@ -196,6 +196,14 @@ OPTIONS
                 Use the given prefix for creating temporary
                 files.  This must be a filename prefix, not a
                 directory name.
+
+    Version
+            Command Line    : -v
+            Context         : speedy
+
+            Description:
+
+                Print the SpeedyCGI version and exit.
 
 METHODS
     The following methods are available in the CGI::SpeedyCGI module.
@@ -251,7 +259,7 @@ INSTALLATION
     This will install the speedy and speedy_backend binaries in the same
     directory where perl was installed, and the SpeedyCGI.pm module in the
     standard perl lib directory. It will also attempt to install the
-    mod_speedycgi module if you have "apxs" in your path.
+    mod_speedycgi module if you have the command apxs in your path.
 
   Install in a Different Directory
 
@@ -265,7 +273,7 @@ INSTALLATION
 
   Apache Installation
 
-    To use the optional apache mod_speedycgi module you must have the "apxs"
+    To use the optional apache mod_speedycgi module you must have the apxs
     command in your path. Redhat includes this command with the "apache-
     devel" RPM, though it may not work properly for installation.
 
@@ -317,12 +325,12 @@ INSTALLATION
                 Options ExecCGI
             </Location>
 
-BUGS
-    Please report any bugs to speedycgi@newlug.org. Below is a list of known
-    bugs:
-
-    *   On Solaris w/Netscape Enterprise 3.x, occasionally the CGI front-end
-        gets stuck in the poll() call in speedy.c. The cause is unknown.
+BUGS / TODO
+    Please report any bugs or requests for changes to speedycgi@newlug.org.
+    The current bugs / todo list can be found at
+    http://www.sourceforge.net/projects/speedycgi/. Go to the Bug Tracking
+    menu and select the group "bug" for bugs, or the group "rfe" for the
+    todo list.
 
 FREQUENTLY ASKED QUESTIONS
     How does the speedy front end connect to the back end process?
@@ -382,45 +390,44 @@ FREQUENTLY ASKED QUESTIONS
         1. The only benefit of this over normal perl is that speedy will
         pre-compile your script between requests.
 
-TODO
-    *   Need benchmarks and feature comparison of speedy, mod_perl, fastcgi.
-
-    *   Pass file descriptors 0/1 to the Perl prog using I_SENDFD on systems
-        that support it (like Solaris). Avoids the overhead of copying
-        through the CGI front-end.
-
-    *   Need to allow more program control from perl via the CGI::SpeedyCGI
-        module. Should be able to have the perl prog wait for a new
-        connection, etc.
-
-    *   Add option to check the amount of memory in use and exit when it gets
-        too high. Currently the only way to control memory usage is
-        indirectly via the MaxRuns option.
-
-    *   Port to Windows NT
-
-    *   See if all of the backend functions can be moved into the CGI::SpeedyCGI
-        module, and then eliminate the separate speedy_backend binary and
-        use the normal perl binary instead.
-
-    *   Enable the group option so a single interpreter can run multiple
-        scripts. This feature is in the temp-file structure, but not yet
-        implemented in code.
-
-    *   Add frontend disk caching so that slow clients don't tie up backends.
-        This would be incompatible with I_SENDFD.
-
 MAILING LIST
-    speedycgi@newlug.org. Subscribe by sending a message to speedycgi-
-    request@newlug.org with "subscribe" in the body.
+    The mailing list address is speedycgi@newlug.org. Subscribe by sending a
+    message to speedycgi-request@newlug.org with the word "subscribe" in the
+    body.
 
-    Archive is at http://newlug.org/mailArchive/speedycgi
+    An archive of the mailing list is at
+    http://newlug.org/mailArchive/speedycgi/ and mirrored at
+    http://daemoninc.com/SpeedyCGI/mailArchive/
 
 DOWNLOADING
-    SpeedyCGI can be retrieved from:
+  Binaries
 
-        http://daemoninc.com/speedycgi
+    Redhat RPMs can be found at:
+
+        http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/rpm
+
+    Debian packages can be found at:
+
+        http://www.debian.org/Packages/stable/interpreters/speedy-cgi-perl.html
+        http://www.debian.org/Packages/unstable/web/libapache-mod-speedycgi.html
+
+    The debian packages are not based on the latest version of SpeedyCGI.
+
+  Source Code
+
+    The standard source code distribution can be retrieved from any CPAN
+    mirror or from:
+
+        http://daemoninc.com/SpeedyCGI/download.html
         http://www.cpan.org/modules/by-authors/id/H/HO/HORROCKS/
+
+    The latest development code can be obtained from the SourceForge CVS
+    repository using the following commands:
+
+     cvs -d:pserver:anonymous@cvs.SpeedyCGI.sourceforge.net:/cvsroot/SpeedyCGI login 
+     cvs -z3 -d:pserver:anonymous@cvs.SpeedyCGI.sourceforge.net:/cvsroot/SpeedyCGI co 2.x
+
+    Press Enter when prompted for a password.
 
 AUTHOR
         Sam Horrocks

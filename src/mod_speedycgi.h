@@ -27,7 +27,6 @@
 #define speedy_free(s)		free(s)
 #define speedy_malloc(n)	malloc(n)
 #define speedy_realloc(s,n)	realloc(s,n)
-#define speedy_strdup(s)	strdup(s)
 
 void speedy_abort(const char *s);
 int speedy_execvp(const char *filename, const char *const *argv);

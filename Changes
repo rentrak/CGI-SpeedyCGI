@@ -1,5 +1,19 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+2.02	Sun Dec 17 21:43:02 PST 2000
+
+	- Bug fixes
+	    - Memory leak in mod_speedycgi
+	    - Zombie backends could appear to still be running
+	    - Options in #! line were sometimes ignored
+	    - Module is not being installed correctly on CPAN
+	    - Fix for mod_speedycgi compile failure on solaris-8
+	- Default value for MaxRuns is now 500
+	- Experimental support for setuid scripts with -DIAMSUID
+	- Don't link the frontend with libperl
+	- New -v option displays the SpeedyCGI version
+	- Add ability to build binary rpms with "make rpm"
+
 2.0.1	Sun Oct 22 19:53:24 PDT 2000
 
 	- Bug fixes:

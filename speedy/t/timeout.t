@@ -3,7 +3,7 @@
 print "1..1\n";
 
 my $scr = 't/scripts/basic.2';
-my $cmd = "$ENV{SPEEDY} -- -t2 $scr";
+my $cmd = "$ENV{SPEEDY} -- -t2 -M1 $scr";
 
 # The script just returns 1, 2, 3 incrementing the persistent counter
 # each time it runs.  If -t is working, then the third time we should

@@ -25,51 +25,72 @@ static int did_spawns;
 static void backend_spawn(slotnum_t gslotnum) {
     int pid;
     const char * const *argv;
-
-    /* Read shbang line to get backend prog option if it's there */
-    speedy_opt_read_shbang();
+    slotnum_t bslotnum;
 
     /* Get args for exec'ing backend */
     argv = speedy_opt_exec_argv();
 
+    /* Create a backend slot for this pid so we have the slot in the
+     * queue right away and can track this backend - no guarantee on when
+     * the child proc will do this otherwise.
+     */
+    bslotnum = speedy_backend_create_slot(gslotnum);
+
     /* Fork */
     pid = fork();
-    if (pid == -1) {
-	speedy_file_set_state(FS_CLOSED);
-	speedy_util_die("fork failed");
-    }
 
-    if (pid != 0) {
+    if (pid) {
 	/* Parent */
 
-	/* Create a backend slot for this pid so we have the slot in the
-	 * queue right away - no guarantee on when the child proc will do this
-	 * otherwise.
-	 */
-	(void) speedy_backend_create_slot(gslotnum, pid);
+	int child_status;
 
-	return;
+	if (pid == -1 || waitpid(pid, &child_status, 0) != pid ||
+	    !WIFEXITED(child_status) || WEXITSTATUS(child_status) != 0)
+	{
+	    speedy_util_die("fork failed");
+	}
     } else {
 	/* Child */
 
-	/* We should be in our own session */
-	setsid();
+	/* Fork */
+	pid = fork();
 
-	/* Exec the backend */
-	speedy_util_execvp(argv[0], argv);
-
-	/* Failed.  Try the original argv[0] + "_backend" */
-	{
-	    const char *orig_file = speedy_opt_orig_argv()[0];
-	    if (orig_file && *orig_file) {
-		char *fname =
-		    speedy_malloc(strlen(orig_file) + sizeof(BE_SUFFIX) + 1);
-
-		sprintf(fname, "%s%s", orig_file, BE_SUFFIX);
-		speedy_util_execvp(fname, argv);
-	    }
+	if (pid == -1) {
+	    _exit(1);
 	}
-	speedy_util_die(argv[0]);
+	else if (pid) {
+	    /* Parent of Grandchild */
+
+	    /* We don't hold the lock on the temp file, but our parent does,
+	     * and it's waiting for us to exit before proceeding, so it's
+	     * safe to write to the file here
+	     */
+	    FILE_SLOT(be_slot, bslotnum).pid = pid;
+
+	    _exit(0);
+	}
+	else {
+	    /* Grandchild */
+
+	    /* We should be in our own session */
+	    setsid();
+
+	    /* Exec the backend */
+	    speedy_util_execvp(argv[0], argv);
+
+	    /* Failed.  Try the original argv[0] + "_backend" */
+	    {
+		const char *orig_file = speedy_opt_orig_argv()[0];
+		if (orig_file && *orig_file) {
+		    char *fname =
+			speedy_malloc(strlen(orig_file) + sizeof(BE_SUFFIX) + 1);
+
+		    sprintf(fname, "%s%s", orig_file, BE_SUFFIX);
+		    speedy_util_execvp(fname, argv);
+		}
+	    }
+	    speedy_util_die(argv[0]);
+	}
     }
 }
 
@@ -108,14 +129,8 @@ static int count_fes(gr_slot_t *gslot, int max) {
  */
 static int backend_check(slotnum_t gslotnum, int in_queue) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
-    int be_count, be_spawning, fe_count, stat_int;
+    int be_count, be_spawning, fe_count;
 
-    /* If we spawned backends, they may have exited.  Do a wait to collect
-     * their statuses so that the kill check will fail.
-     */
-    while (waitpid(-1, &stat_int, WNOHANG) > 0)
-	;
-    
     /* Check for dead backend processes.  If this group contains no
      * fe's or be's it may be removed here, so don't call this function
      * unless the group is populated.
@@ -236,7 +251,7 @@ static void frontend_ping(slotnum_t gslotnum, slotnum_t fslotnum) {
 
 #define NUMSIGS (sizeof(signum) / sizeof(int))
 
-static int		signum[] = {SIGALRM, SIGCHLD};
+static const int	signum[] = {SIGALRM};
 static struct sigaction	sigact_save[NUMSIGS];
 static char		sig_setup_done;
 static volatile char	got_sig;
@@ -264,7 +279,7 @@ static void sig_handler_teardown() {
 
     /* Put back alarm */
     if (next_alarm) {
-	next_alarm -= time(NULL);
+	next_alarm -= speedy_util_time();
 	alarm(next_alarm > 0 ? next_alarm : 1);
     }
 
@@ -284,7 +299,7 @@ static void sig_handler_setup() {
 
     /* Save alarm for later */
     if ((next_alarm = alarm(0))) {
-	next_alarm += time(NULL);
+	next_alarm += speedy_util_time();
     }
 
     /* Set up handlers and save old action setting */
@@ -326,7 +341,6 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
     slotnum_t fslotnum, retval = 0, tail;
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
     fe_slot_t *fslot;
-    time_t last_stat = time(NULL), now;
     int file_changed;
 
     /* Install sig handlers */
@@ -369,14 +383,10 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
 
 	/* Wait for a signal */
 	sig_wait();
+	speedy_util_time_invalidate();
 
 	/* Find out if our file changed.  Do this while unlocked */
-	if ((now = time(NULL)) - last_stat > OPTVAL_RESTATTIMEOUT) {
-	    last_stat = now;
-	    file_changed = speedy_script_changed();
-	} else {
-	    file_changed = 0;
-	}
+	file_changed = speedy_script_changed();
 
 	/* Map in & lock down temp file */
 	speedy_file_set_state(FS_WRITING);
@@ -413,12 +423,13 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
 static slotnum_t get_a_backend(pid_t *pid) {
     slotnum_t sslotnum, gslotnum, bslotnum = 0;
 
-    /* Map in & lock down temp file */
+    /* Map in & lock down temp file, intially only for reading */
     speedy_file_set_state(FS_LOCKED);
 
     /* Locate the group and script slot */
     speedy_script_find(&gslotnum, &sslotnum);
 
+    /* Might start writing to the temp file now */
     speedy_file_set_state(FS_WRITING);
 
     /* Try to quickly grab a backend without queueing */
@@ -442,27 +453,24 @@ static slotnum_t get_a_backend(pid_t *pid) {
 }
 
 
-void speedy_frontend_connect(const struct stat *stbuf, int *s, int *e) {
-
+void speedy_frontend_connect(int *s, int *e) {
+    
     /* Create sockets in preparation for connect.  This may take a while */
     speedy_ipc_connect_prepare(s, e);
+
+    /* May need options from the #! line in the script */
+    speedy_opt_read_shbang();
 
     while (1) {
 	slotnum_t bslotnum;
 	pid_t pid;
-
-	/* Stat the script */
-	speedy_script_stat(stbuf);
-
-	/* Only used the provided stat buf the first time through */
-	stbuf = NULL;
 
 	/* Find a backend */
 	if ((bslotnum = get_a_backend(&pid))) {
 
 	    /* Try to talk to this backend.  If successful, return */
 	    if (speedy_ipc_connect(bslotnum, *s, *e))
-		return;
+		break;
 
 	    /* Backend is not responding.  Kill it to make sure it's gone */
 	    speedy_util_kill(pid, SIGKILL);
@@ -471,6 +479,7 @@ void speedy_frontend_connect(const struct stat *stbuf, int *s, int *e) {
 	    speedy_ipc_connect_prepare(s, e);
 	}
     }
+    speedy_script_close();
 }
 
 /* Return the size of buffer needed to send array. */

@@ -45,8 +45,7 @@ desc	exit the persistent perl interpreter.  Zero indicates no timeout.
 option	MaxRuns
 type	whole
 letter	r
-defval	0
-defdesc	no max
+defval	500
 context	all
 desc	Once the perl interpreter has run this many times, re-exec the
 desc    backend process.  Zero indicates no maximum.  This option is useful
@@ -113,3 +112,9 @@ type	natural
 defval	1
 desc	The frontend can spawn this many backends simultaneously when there
 desc	are frontends waiting for backends.  More may not be better.
+
+option	Version
+type	toggle
+letter	v
+context	speedy
+desc	Print the SpeedyCGI version and exit.

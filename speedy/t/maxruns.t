@@ -13,6 +13,7 @@ utime time, time, $scr;
 sleep 2;
 
 my $one = `$cmd`;
+sleep 1;
 my $two = `$cmd`;
 my $three = `$cmd`;
 

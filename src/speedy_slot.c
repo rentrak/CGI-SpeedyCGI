@@ -33,9 +33,8 @@ slotnum_t speedy_slot_alloc() {
 	slotnum = FILE_HEAD.slots_alloced + 1;
 
 	/* Abort if too many slots */
-	if (slotnum >= MAX_SLOTS) {
+	if (slotnum >= MAX_SLOTS)
 	    DIE_QUIET("Out of slots");
-	}
 
 	/* Check here if the file is large enough to hold this slot.
 	 * The speedy_file code is supposed to allocate enough extra

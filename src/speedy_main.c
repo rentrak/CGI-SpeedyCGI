@@ -23,24 +23,60 @@
 
 #include "speedy.h"
 
-#define NUMCBUFS	3
+#define NUMFDS	3
+
+static const int file_flags[NUMFDS] = {O_RDONLY, O_WRONLY, O_WRONLY};
 
 int main(int argc, char **argv, char **_junk) {
     extern char **environ;
     PollInfo pi;
     char *ibuf_buf;
     int env_sz, ibuf_sz, did_shutdown, i;
-    int s, e;
-    CopyBuf ibuf, obuf, ebuf, *cbs[NUMCBUFS];
+    int s, e, is_open[NUMFDS];
+    CopyBuf ibuf, obuf, ebuf, *cbs[NUMFDS];
     cbs[0] = &ibuf; cbs[1] = &obuf; cbs[2] = &ebuf;
 
     signal(SIGPIPE, SIG_IGN);
 
+    /* Find out if fd's 0-2 are open.  Also make them non-blocking */
+    for (i = 0; i < NUMFDS; ++i) {
+	is_open[i] =
+	    fcntl(i, F_SETFL, file_flags[i] | O_NONBLOCK) != -1 ||
+	    errno != EBADF;
+    }
+
     /* Initialize options */
     speedy_opt_init((const char * const *)argv, (const char * const *)environ);
 
+#   ifdef IAMSUID
+	if (speedy_util_geteuid() == 0) {
+	    int new_uid;
+
+	    /* Set group-id */
+	    if (speedy_script_getstat()->st_mode & S_ISGID) {
+		if (setegid(speedy_script_getstat()->st_gid) == -1)
+		    speedy_util_die("setegid");
+	    }
+
+	    /* Must set euid to something - either the script owner
+	     * or the real-uid
+	     */
+	    if (speedy_script_getstat()->st_mode & S_ISUID) {
+		new_uid = speedy_script_getstat()->st_uid;
+	    } else {
+		new_uid = speedy_util_getuid();
+	    }
+	    if (speedy_util_seteuid(new_uid) == -1)
+		speedy_util_die("seteuid");
+	}
+#   endif
+
     /* Connect up with a backend */
-    speedy_frontend_connect(NULL, &s, &e);
+    speedy_frontend_connect(&s, &e);
+
+    /* Non-blocking I/O on sockets */
+    fcntl(e, F_SETFL, O_RDWR|O_NONBLOCK);
+    fcntl(s, F_SETFL, O_RDWR|O_NONBLOCK);
 
     /* Create buffer with env/argv data to send */
     ibuf_buf = speedy_frontend_mkenv(
@@ -58,7 +94,7 @@ int main(int argc, char **argv, char **_junk) {
     speedy_cb_alloc(
 	&ibuf,
 	ibuf_sz,
-	0,
+	is_open[0] ? 0 : -1,
 	s,
 	ibuf_buf,
 	env_sz
@@ -67,7 +103,7 @@ int main(int argc, char **argv, char **_junk) {
 	&obuf,
 	OPTVAL_BUFSIZGET,
 	s,
-	1,
+	is_open[1] ? 1 : -1,
 	NULL,
 	0
     );
@@ -75,24 +111,21 @@ int main(int argc, char **argv, char **_junk) {
 	&ebuf,
 	512,
 	e,
-	2,
+	is_open[2] ? 2 : -1,
 	NULL,
 	0
     );
 
-    /* Non-blocking I/O */
-    fcntl(0, F_SETFL, O_RDONLY|O_NONBLOCK);
-    fcntl(1, F_SETFL, O_WRONLY|O_NONBLOCK);
-    fcntl(2, F_SETFL, O_WRONLY|O_NONBLOCK);
-    fcntl(e, F_SETFL, O_RDWR|O_NONBLOCK);
-    fcntl(s, F_SETFL, O_RDWR|O_NONBLOCK);
-
     /* Poll/select may not wakeup on intial eof, so set for initial read
      * (this is tested in initial_eof test #1)
+     * Also, set eof for files that are not open
      */
     speedy_poll_reset(&pi);
-    for (i = 0; i < NUMCBUFS; ++i) {
-	speedy_poll_set(&pi, cbs[i]->rdfd, SPEEDY_POLLIN);
+    for (i = 0; i < NUMFDS; ++i) {
+	if (is_open[i])
+	    speedy_poll_set(&pi, cbs[i]->rdfd, SPEEDY_POLLIN);
+	else
+	    BUF_SETEOF(*(cbs[i]));
     }
 
     /* Try to write our env/argv without dropping into select */
@@ -102,10 +135,12 @@ int main(int argc, char **argv, char **_junk) {
     for (did_shutdown = 0;;) {
 
 	/* Do reads/writes */
-	for (i = 0; i < NUMCBUFS; ++i) {
+	for (i = 0; i < NUMFDS; ++i) {
 	    CopyBuf *b = cbs[i];
-	    int do_read  = speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN);
-	    int do_write = speedy_poll_isset(&pi, b->wrfd, SPEEDY_POLLOUT);
+	    int do_read  = CANREAD(*b) &&
+	                   speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN);
+	    int do_write = CANWRITE(*b) &&
+	                   speedy_poll_isset(&pi, b->wrfd, SPEEDY_POLLOUT);
 
 	    while (do_read || do_write) {
 		if (do_read) {
@@ -116,8 +151,7 @@ int main(int argc, char **argv, char **_junk) {
 		    do_read = 0;
 		}
 
-		/*
-		 * Attempt write now if we did a read.  Slightly more efficient
+		/* Attempt write now if we did a read.  Slightly more efficient
 		 * and on SGI if we are run with >/dev/null,  select won't
 		 * initially wakeup (this is tested in initial_eof test #2)
 		 */
@@ -144,7 +178,7 @@ int main(int argc, char **argv, char **_junk) {
 	speedy_poll_reset(&pi);
 	
 	/* Set read/write events */
-	for (i = 0; i < NUMCBUFS; ++i) {
+	for (i = 0; i < NUMFDS; ++i) {
 	    CopyBuf *b = cbs[i];
 	    if ( CANREAD(*b)) speedy_poll_set(&pi, b->rdfd, SPEEDY_POLLIN);
 	    if (CANWRITE(*b)) speedy_poll_set(&pi, b->wrfd, SPEEDY_POLLOUT);
@@ -153,15 +187,17 @@ int main(int argc, char **argv, char **_junk) {
 	/* Poll... */
 	if (speedy_poll_wait(&pi, -1) == -1)
 	    speedy_util_die("poll");
+	speedy_util_time_invalidate();
     }
 
     /* SGI's /dev/tty goes crazy unless we turn of non-blocking I/O. */
-    fcntl(0, F_SETFL, O_RDONLY);
-    fcntl(1, F_SETFL, O_WRONLY);
-    fcntl(2, F_SETFL, O_WRONLY);
+    for (i = 0; i < NUMFDS; ++i) {
+	if (is_open[i])
+	    fcntl(i, F_SETFL, file_flags[i]);
+    }
 
     /* Slightly faster to just exit now instead of cleaning up */
-    return 0;
+    _exit(0);
 
     /* Here's what would need to be done if we cleaned up properly */
     /*NOTREACHED*/
@@ -181,6 +217,6 @@ int main(int argc, char **argv, char **_junk) {
  */
 
 void speedy_abort(const char *s) {
-    fputs(s, stderr);
+    write(2, s, strlen(s));
     exit(1);
 }

@@ -76,6 +76,5 @@ void speedy_cb_write(CopyBuf *bp) {
     }
     else if (n == -1 && errno != EAGAIN) {
 	bp->sz = 0;
-	bp->eof = 1;
     }
 }
