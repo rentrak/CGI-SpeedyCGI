@@ -68,3 +68,13 @@ void speedy_util_die(const char *fmt, ...) {
     strcat(buf, "\n");
     speedy_abort(buf);
 }
+
+int speedy_util_execvp(const char *filename, const char *const *argv) {
+    extern char **environ;
+
+    /* Get original argv */
+    environ = (char **)speedy_opt_exec_envp();
+
+    /* Exec the backend */
+    return speedy_execvp(filename, argv);
+}

@@ -1,5 +1,18 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+2.0.1	Sun Oct 22 19:53:24 PDT 2000
+
+	- Bug fixes:
+	    - mod_speedycgi reports temp file is corrupt
+	    - Switching from mod_perl to mod_speedycgi causes error
+	    - Runaway file growth in FreeBSD 3.4
+	    - Stranded sockets in /tmp
+	    - Dead frontends are left stranded in invalid groups
+	    - Cannot reliably detect temp-file removal
+	    - MAP_FAILED not defined on HP-UX
+	    - index() declaration compiler warning on Solaris
+	  Details are at http://sf-www.sourceforge.net/projects/SpeedyCGI
+
 2.0	Mon Sep 11 02:46:57 PDT 2000
 	
 	- Use unix sockets instead of tcp sockets.  Fixes the TIME_WAIT

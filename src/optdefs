@@ -106,7 +106,7 @@ option	RestatTimeout
 type	natural
 defval	5
 desc	The frontend re-stats the perl-script this often while waiting for
-desc	a backend.
+desc	a backend.  Also used as a timeout for re-opening the temp-file.
 
 option	BESpawns
 type	natural

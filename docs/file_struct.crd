@@ -3,7 +3,7 @@ Storage
 	{ Format 1.29 }
 	{ GeneratedFrom TCRD-version-1.96 }
 	{ WrittenBy sam }
-	{ WrittenOn "Sat Aug 12 20:07:52 2000" }
+	{ WrittenOn "Sun Oct 22 16:13:44 2000" }
 }
 
 Document 
@@ -59,7 +59,8 @@ ClassNode 138675616
 	{ Annotation "" }
 	{ Parent 0 }
 	{ Index "" }
-	{ Attributes 5 }
+	{ Attributes 6 }
+	{ Attribute "create_time" }
 	{ Attribute "group_head=" }
 	{ Attribute "slot_free=" }
 	{ Attribute "slots_alloced" }
@@ -285,8 +286,8 @@ DoubleBox 138718464
 {
 	{ View 138589824 }
 	{ Subject 138675616 }
-	{ Position 300 150 }
-	{ Size 120 104 }
+	{ Position 300 160 }
+	{ Size 120 117 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Solid }
@@ -357,9 +358,9 @@ T1Line 138733208
 	{ End1 Empty }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 360 153 }
-	{ Point 434 158 }
-	{ NamePosition 397 146 }
+	{ Point 360 160 }
+	{ Point 434 160 }
+	{ NamePosition 397 150 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Solid }
@@ -368,7 +369,7 @@ T1Line 138733208
 	{ TextAlignment Center }
 	{ TextColor "black" }
 	{ NameUnderlined False }
-	{ T1Position 370 162 }
+	{ T1Position 370 170 }
 }
 
 DoubleBox 138737656
@@ -399,9 +400,9 @@ T1Line 138743192
 	{ End1 Empty }
 	{ End2 FilledArrow }
 	{ Points 2 }
-	{ Point 300 202 }
+	{ Point 300 218 }
 	{ Point 300 255 }
-	{ NamePosition 286 228 }
+	{ NamePosition 286 236 }
 	{ Color "black" }
 	{ LineWidth 1 }
 	{ LineStyle Solid }
@@ -410,7 +411,7 @@ T1Line 138743192
 	{ TextAlignment Center }
 	{ TextColor "black" }
 	{ NameUnderlined False }
-	{ T1Position 314 212 }
+	{ T1Position 314 228 }
 }
 
 T1Line 138747680

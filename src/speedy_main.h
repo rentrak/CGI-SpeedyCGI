@@ -18,9 +18,9 @@
  */
 
 /* Stay out of the way of stdio */
-#define PREF_FD_FILE		3
-#define PREF_FD_CONNECT_S	4
-#define PREF_FD_CONNECT_E	5
+#define PREF_FD_CONNECT_S	3
+#define PREF_FD_CONNECT_E	4
+#define PREF_FD_FILE		5
 
 /* 
  * Glue

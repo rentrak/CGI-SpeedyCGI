@@ -23,22 +23,28 @@ static int listener;
 static struct stat listener_stbuf;
 static PollInfo listener_pi;
 
-static char *get_fname(pid_t pid, int do_unlink) {
+#ifdef ENOBUFS
+#   define NO_BUFSPC(e) ((e) == ENOBUFS || (e) == ENOMEM)
+#else
+#   define NO_BUFSPC(e) ((e) == ENOMEM)
+#endif
+
+static char *get_fname(slotnum_t slotnum, int do_unlink) {
     char *fname;
     fname = (char*) speedy_malloc(strlen(OPTVAL_TMPBASE) + 64);
     sprintf(fname, "%s.%x.%x.S",
-	OPTVAL_TMPBASE, (int)pid, speedy_util_geteuid()
+	OPTVAL_TMPBASE, (int)slotnum, speedy_util_geteuid()
     );
     if (do_unlink)
 	unlink(fname);
     return fname;
 }
 
-static int setup_sock(
-    pid_t pid, struct sockaddr_un *sa, int pref_fd, int do_unlink
+static void make_sockname(
+    slotnum_t slotnum, struct sockaddr_un *sa, int do_unlink
 )
 {
-    char *fname = get_fname(pid, do_unlink);
+    char *fname = get_fname(slotnum, do_unlink);
     speedy_bzero(sa, sizeof(*sa));
     sa->sun_family = AF_UNIX;
     if (strlen(fname)+1 > sizeof(sa->sun_path)) {
@@ -46,30 +52,38 @@ static int setup_sock(
     }
     strcpy(sa->sun_path, fname);
     speedy_free(fname);
-    return speedy_util_pref_fd(socket(AF_UNIX, SOCK_STREAM, 0), pref_fd);
 }
 
-static int do_connect(pid_t pid, int pref_fd) {
-    struct sockaddr_un sa;
-    int talker;
+static int make_sock(int pref_fd) {
+    int i, fd;
 
-    talker = setup_sock(pid, &sa, pref_fd, 0);
-    if (talker != -1) {
-	if (connect(talker, (struct sockaddr *)&sa, sizeof(sa)) != -1) {
-	    return talker;
-	}
-	close(talker);
+    for (i = 0; i < 300; ++i) {
+	fd = speedy_util_pref_fd(socket(AF_UNIX, SOCK_STREAM, 0), pref_fd);
+	if (fd != -1)
+	    return fd;
+	else if (NO_BUFSPC(errno))
+	    sleep(1);
+	else
+	    break;
     }
+    speedy_util_die("cannot create socket");
     return -1;
 }
 
-void speedy_ipc_listen() {
+static int do_connect(slotnum_t slotnum, int fd) {
+    struct sockaddr_un sa;
+
+    make_sockname(slotnum, &sa, 0);
+    return connect(fd, (struct sockaddr *)&sa, sizeof(sa)) != -1;
+}
+
+void speedy_ipc_listen(slotnum_t slotnum) {
     struct sockaddr_un sa;
 
     listener = -1;
     if (PREF_FD_LISTENER != -1) {
 	int namelen = sizeof(sa);
-	char *fname = get_fname(speedy_util_getpid(), 0);
+	char *fname = get_fname(slotnum, 0);
 	struct stat stbuf;
 
 	if (getsockname(PREF_FD_LISTENER, (struct sockaddr *)&sa, &namelen) != -1 &&
@@ -84,9 +98,8 @@ void speedy_ipc_listen() {
     }
     if (listener == -1) {
 	mode_t saved_umask = umask(077);
-	listener = setup_sock(speedy_util_getpid(), &sa, PREF_FD_LISTENER, 1);
-	if (listener == -1)
-	    speedy_util_die("cannot create socket");
+	listener = make_sock(PREF_FD_LISTENER);
+	make_sockname(slotnum, &sa, 1);
 	if (bind(listener, (struct sockaddr*)&sa, sizeof(sa)) == -1)
 	    speedy_util_die("cannot bind socket");
 	umask(saved_umask);
@@ -97,7 +110,7 @@ void speedy_ipc_listen() {
     speedy_poll_init(&listener_pi, listener);
 }
 
-void speedy_ipc_listen_fixfd() {
+void speedy_ipc_listen_fixfd(slotnum_t slotnum) {
     struct stat stbuf;
     int status, test1, test2;
 
@@ -110,12 +123,12 @@ void speedy_ipc_listen_fixfd() {
     test2 = stbuf.st_ino != listener_stbuf.st_ino;
     if (status == -1 || test1 || test2) {
 	close(listener);
-	speedy_ipc_listen();
+	speedy_ipc_listen(slotnum);
     }
 }
 
-void speedy_ipc_cleanup(pid_t pid) {
-    speedy_free(get_fname(pid, 1));
+void speedy_ipc_cleanup(slotnum_t slotnum) {
+    speedy_free(get_fname(slotnum, 1));
 }
 
 void speedy_ipc_unlisten() {
@@ -123,17 +136,17 @@ void speedy_ipc_unlisten() {
     speedy_poll_free(&listener_pi);
 }
 
-int speedy_ipc_connect(pid_t pid, int *s, int *e) {
+void speedy_ipc_connect_prepare(int *s, int *e) {
+    *s = make_sock(PREF_FD_CONNECT_S);
+    *e = make_sock(PREF_FD_CONNECT_E);
+}
 
-    *s = do_connect(pid, PREF_FD_CONNECT_S);
-    if (*s == -1) return 0;
-
-    *e = do_connect(pid, PREF_FD_CONNECT_E);
-    if (*e == -1) {
-	close(*s);
-	return 0;
-    }
-    return 1;
+int speedy_ipc_connect(slotnum_t slotnum, int s, int e) {
+    if (do_connect(slotnum, s) && do_connect(slotnum, e))
+	return 1;
+    close(s);
+    close(e);
+    return 0;
 }
 
 static int do_accept(int pref_fd) {

@@ -47,18 +47,16 @@ package MY;
 use ExtUtils::Embed;
 
 sub postamble {
-    my $extra;
+    my $extra = SpeedyMake->optdefs_cmds('src');
     if (&main::do_apache) {
-	$extra = "\ninstall ::\n\tcd mod_speedycgi; make install\n\n";
+	$extra .= "\ninstall ::\n\tcd mod_speedycgi; make install\n\n";
     }
 '
-src/SpeedyCGI.pm: src/SpeedyCGI.src src/optdefs
-	cd src; $(MAKE)
-
 mydist: README README.html tardist
 
 README: src/SpeedyCGI.pm
 	(cd src; perl -e "use Pod::Text; pod2text(\"-80\")" < SpeedyCGI.pm >../README)
+	chmod -R u+w,go-w,go+r .
 
 README.html: src/SpeedyCGI.pm
 	(cd src; pod2html SpeedyCGI.pm >../README.html; rm -f pod2html*)

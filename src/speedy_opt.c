@@ -310,7 +310,7 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
     for (p = envp; *p; ++p) {
 	if (strncmp(*p, PREFIX, PREFIX_LEN) == 0) {
 	    const char *optname = *p + PREFIX_LEN;
-	    const char *eqpos = index(optname, '=');
+	    const char *eqpos = strchr(optname, '=');
 	    if (eqpos)
 		(void) opt_set_byname2(optname, eqpos - optname, eqpos+1);
 	}

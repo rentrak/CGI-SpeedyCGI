@@ -53,6 +53,7 @@ void speedy_poll_set(PollInfo *pi, int fd, int flags) {
 	pfd->events = pfd->revents = 0;
     }
     pfd->events |= flags;
+    pfd->revents |= flags;
 }
 
 int speedy_poll_wait(PollInfo *pi, int msecs) {

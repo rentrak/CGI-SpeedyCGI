@@ -18,6 +18,7 @@
  */
 
 typedef struct _file_head {
+    struct timeval	create_time;
     slotnum_t		group_head;
     slotnum_t		slot_free;
     slotnum_t		slots_alloced;
@@ -31,20 +32,30 @@ typedef struct _file {
 } file_t;
 
 #define FILE_ALLOC_CHUNK	512
-#define FILE_REV		'0'
+#define FILE_REV		'1'
 #define FILE_HEAD		(speedy_file_maddr->file_head)
 #define FILE_SLOTS		(speedy_file_maddr->slots)
 #define FILE_SLOT(member, n)	(FILE_SLOTS[SLOT_CHECK(n)-1].member)
 #define MIN_SLOTS_FREE		5
 
+/* File access states */
+#define FS_CLOSED	0	/* File is closed, not mapped */
+#define FS_OPEN		1	/* Keep open for performance only */
+#define FS_HAVESLOTS	2	/* Keep open - we are holding onto slots in
+				   this file */
+#define FS_LOCKED	3	/* Locked, mmaped, read-only */
+#define FS_WRITING	4	/* Locked, mmaped, writing to file */
+
 #ifndef PREF_FD_FILE
 #   define PREF_FD_FILE -1
 #endif
 
+#ifndef MAP_FAILED
+#   define MAP_FAILED (-1)
+#endif
+
 extern file_t *speedy_file_maddr;
-void speedy_file_change_fd(int fd);
-void speedy_file_lock();
-void speedy_file_unlock();
 void speedy_file_fd_is_suspect();
-void speedy_file_close();
 int speedy_file_size();
+void speedy_file_set_state(int new_state);
+void speedy_file_need_reopen();

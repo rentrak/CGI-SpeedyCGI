@@ -56,7 +56,7 @@ void speedy_backend_dispose(slotnum_t gslotnum, slotnum_t bslotnum) {
 
 	be_wait_remove(gslot, bslotnum);
 	be_list_remove(gslot, bslot);
-	speedy_ipc_cleanup(bslot->pid);
+	speedy_ipc_cleanup(bslotnum);
 	speedy_slot_free(bslotnum);
     }
 }
@@ -125,52 +125,54 @@ void speedy_backend_kill(slotnum_t gslotnum, slotnum_t bslotnum) {
     speedy_backend_dispose(gslotnum, bslotnum);
 }
 
+/* Bump the bslotnum, possibly going to the next group, and possibly
+ * wrapping around to the first group if we drop off the end of the
+ * group list.  Worst case we will wrap around and return ourself.
+ */
+static void be_next_slot(slotnum_t *gslotnum, slotnum_t *bslotnum) {
+    *bslotnum = FILE_SLOT(be_slot, *bslotnum).next_slot;
+    while (!*bslotnum) {
+	if (!(*gslotnum = FILE_SLOT(gr_slot, *gslotnum).next_slot) &&
+	    !(*gslotnum = FILE_HEAD.group_head)) 
+	{
+	    DIE_QUIET("Group list or backend lists are corrupt");
+	}
+	*bslotnum = FILE_SLOT(gr_slot, *gslotnum).be_head;
+    }
+}
 
-/* Run a check starting at this bslotnum.  Remove any empty groups
- * along the way.
+
+/* Run a check starting at this bslotnum, or the next.
+ * Remove any empty groups along the way.
  */
 void speedy_backend_check(slotnum_t gslotnum, slotnum_t bslotnum) {
-    int alldone = 0;
-    slotnum_t gnext, bnext;
+    if (!gslotnum || !bslotnum)
+	return;
 
-    /* Check first backend.  If dead, continue down the list */
-    while (!alldone && gslotnum) {
-	gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
-	gnext = gslot->next_slot;
+    while (speedy_util_kill(FILE_SLOT(be_slot, bslotnum).pid, 0) == -1) {
+	slotnum_t g_next = gslotnum, b_next = bslotnum;
 
-	if (!bslotnum)
-	    bslotnum = gslot->be_head;
+	/* Must do "next" function while this slot/group is still valid */
+	be_next_slot(&g_next, &b_next);
 
-	while (!alldone && bslotnum) {
-	    be_slot_t *bslot = &FILE_SLOT(be_slot, bslotnum);
-	    bnext = bslot->next_slot;
-
-	    /* If it's our pid, skip it */
-	    if (bslot->pid != speedy_util_getpid()) {
-		if (speedy_util_kill(bslot->pid, 0) == -1) {
-		    /* This backend is not running, dispose of it */
-		    speedy_backend_dispose(gslotnum, bslotnum);
-		} else {
-		    alldone = 1;
-		}
-	    }
-	    bslotnum = bnext;
-	}
+	/* This backend is not running, dispose of it */
+	speedy_backend_dispose(gslotnum, bslotnum);
 
 	/* Try to remove this group if possible */
 	speedy_group_cleanup(gslotnum);
 
-	gslotnum = gnext;
+	/* Wrapped around to ourself, so we must be the only be in the file */
+	if (b_next == bslotnum)
+	    break;
+
+	gslotnum = g_next;
+	bslotnum = b_next;
     }
 }
 
-/* Check starting at the first backend in the file */
-void speedy_backend_check_first() {
-    slotnum_t gslotnum;
-
-    if ((gslotnum = FILE_HEAD.group_head)) {
-	speedy_backend_check(gslotnum, FILE_SLOT(gr_slot, gslotnum).be_head);
-    }
+void speedy_backend_check_next(slotnum_t gslotnum, slotnum_t bslotnum) {
+    be_next_slot(&gslotnum, &bslotnum);
+    speedy_backend_check(gslotnum, bslotnum);
 }
 
 slotnum_t speedy_backend_create_slot(slotnum_t gslotnum, pid_t pid) {

@@ -115,6 +115,23 @@ static const char *set_option(cmd_parms *cmd, void *dummy, char *arg)
 /* Include the definition of the cgi_cmds array */
 #include "mod_speedycgi_cmds.c"
 
+/* This must get called after "set_option" calls above.  This is the current
+ * apache behaviour, so it works, though it seems like init would be called
+ * first thing.
+ */
+static void cgi_init(server_rec *s, pool *p)
+{
+    extern char **environ;
+    static const char *prog_argv[2];
+
+    /* Initialize speedy options */
+    prog_argv[0] = "";
+    prog_argv[1] = NULL;
+    speedy_opt_init(
+	(const char * const *)prog_argv, (const char * const *)environ
+    );
+}
+
 /****************************************************************
  *
  * Actual CGI handling...
@@ -127,26 +144,10 @@ static int cgi_handler(request_rec *r)
     BUFF *script_io, *script_err;
     int is_included = !strcmp(r->protocol, "INCLUDED");
     char *argsbuffer, *argv0, *script_argv[2];
-    static int did_opt_init;
     int sendenv_size, alloc_size;
 
     /* Copy request_rec to global */
     global_r = r;
-
-    /* Initialize speedy options 
-     * Must be done *after* the config file speedy_opt_set calls (above)
-     */
-    if (!did_opt_init) {
-	extern char **environ;
-	const char *prog_argv[2];
-
-	prog_argv[0] = "";
-	prog_argv[1] = NULL;
-	speedy_opt_init(
-	    (const char * const *)prog_argv, (const char * const *)environ
-	);
-	did_opt_init = 1;
-    }
 
     if (r->method_number == M_OPTIONS) {
 	/* 99 out of 100 CGI scripts, this is all they support */
@@ -216,7 +217,6 @@ static int cgi_handler(request_rec *r)
     script_argv[1] = NULL;
     speedy_opt_set_script_argv((const char * const *)script_argv);
     speedy_frontend_connect(&(r->finfo), &s, &e);
-    speedy_file_close();
 
     /*
      * Open up buffered files -- "s" contains stdin/stdout, "e" is stderr
@@ -353,7 +353,7 @@ static const handler_rec cgi_handlers[] =
 module MODULE_VAR_EXPORT speedycgi_module =
 {
     STANDARD_MODULE_STUFF,
-    NULL,			/* initializer */
+    cgi_init,			/* initializer */
     NULL,			/* dir config creater */
     NULL,			/* dir merger --- default is to override */
     NULL,			/* server config */

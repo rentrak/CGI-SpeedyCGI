@@ -68,9 +68,8 @@ static int get_pv_opts(int create) {
 /* Remove myself from the temp file */
 static void remove_from_temp() {
     if (bslotnum && gslotnum) {
-	speedy_file_lock();
-	speedy_backend_check_first();
-	speedy_backend_check(gslotnum, bslotnum);
+	speedy_file_set_state(FS_WRITING);
+	speedy_backend_check_next(gslotnum, bslotnum);
 	speedy_backend_dispose(gslotnum, bslotnum);
 	speedy_group_cleanup(gslotnum);
 	bslotnum = gslotnum = 0;
@@ -79,16 +78,24 @@ static void remove_from_temp() {
 
 /* Shutdown and exit. */
 static void all_done(int exec_myself) {
+
+    /* Re-open the file to make sure we're not going to remove a temp
+     * file belonging to a newer backend using this slot in a newer
+     * version of this file
+     */
+    speedy_file_set_state(FS_HAVESLOTS);
+    speedy_file_need_reopen();
+
     if (exec_myself) {
 	if (bslotnum) {
 	    /* Lower the maturity level for this slot */
-	    speedy_file_lock();
+	    speedy_file_set_state(FS_WRITING);
 	    FILE_SLOT(be_slot, bslotnum).maturity = 0;
 	}
     } else {
 	remove_from_temp();
     }
-    speedy_file_close();
+    speedy_file_set_state(FS_CLOSED);
 
     /* Call the shutdown handler if present */
     if (g_perl) {
@@ -102,7 +109,7 @@ static void all_done(int exec_myself) {
 	perl_free(g_perl);
     }
     if (exec_myself) {
-	speedy_execvp((speedy_opt_orig_argv()[0]), speedy_opt_orig_argv());
+	speedy_util_execvp((speedy_opt_orig_argv()[0]), speedy_opt_orig_argv());
 	remove_from_temp();
     }
     exit(0);
@@ -340,24 +347,23 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
     close(2);
 
     /* Start listening on our socket */
-    speedy_ipc_listen();
+    speedy_ipc_listen(bslotnum);
 
     /* Main loop */
     for (numrun = 1; ; ++numrun) {
 	
 	/* Lock/mmap our temp file */
-	speedy_file_lock();
+	speedy_file_set_state(FS_WRITING);
 
 	/* If our group is invalid, exit quietly */
 	if (!speedy_group_isvalid(gslotnum)) {
 	    gslotnum = 0;
-	    speedy_file_unlock();
+	    speedy_file_set_state(FS_HAVESLOTS);
 	    all_done(0);
 	}
 	
 	/* Check our backend siblings */
-	speedy_backend_check_first();
-	speedy_backend_check(gslotnum, bslotnum);
+	speedy_backend_check_next(gslotnum, bslotnum);
 	
 	/* Update our maturity level */
 	FILE_SLOT(be_slot, bslotnum).maturity = numrun > 1 ? 2 : 1;
@@ -368,8 +374,11 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 	/* Send out alarm signal to frontends */
 	speedy_group_sendsigs(gslotnum);
 
+	/* Fix our listener fd */
+	speedy_ipc_listen_fixfd(bslotnum);
+
 	/* Unlock file */
-	speedy_file_unlock();
+	speedy_file_set_state(FS_HAVESLOTS);
 
 	/* Do an accept on our socket */
 	backend_accept();
@@ -379,9 +388,6 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 
 	/* Tell our file code that its fd is suspect */
 	speedy_file_fd_is_suspect();
-
-	/* Fix our listener fd */
-	speedy_ipc_listen_fixfd();
 
 	/* Make sure we cd back to the correct directory */
 	if (curdir != -1) fchdir(curdir);

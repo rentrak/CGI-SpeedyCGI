@@ -2,7 +2,7 @@ NAME
     CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 
 SYNOPSIS
-     #!/usr/local/bin/speedy
+     #!/usr/bin/speedy
 
      ### Your CGI Script Here
      print "Content-type: text/html\n\nHello World!\n";
@@ -31,11 +31,11 @@ DESCRIPTION
     in many cases as simple has changing the interpreter line at the top of
     the script from
 
-        #!/usr/local/bin/perl
+        #!/usr/bin/perl
 
     to
 
-        #!/usr/local/bin/speedy
+        #!/usr/bin/speedy
 
     After the script is initially run, instead of exiting, SpeedyCGI keeps
     the perl interpreter running in memory. During subsequent runs, this
@@ -67,11 +67,11 @@ OPTIONS
 
         For example the line:
 
-                #!/usr/local/bin/speedy -w -- -t300
+                #!/usr/bin/speedy -w -- -t300
 
         at the top of your script will call SpeedyCGI with the perl option
         "`-w'" and will pass the "`-t'" option to speedy, setting the
-        Timeout option to 300 seconds.
+        Timeout to 300 seconds.
 
     Environment
         Environment variables can be used to pass in options. This can only
@@ -256,7 +256,7 @@ INSTALLATION
   Install in a Different Directory
 
     To install in a different directory, change the first line in the
-    standard install to:
+    section on "Standard Install" to:
 
         perl Makefile.PL PREFIX=/somewhere
 
@@ -267,8 +267,7 @@ INSTALLATION
 
     To use the optional apache mod_speedycgi module you must have the "apxs"
     command in your path. Redhat includes this command with the "apache-
-    devel" RPM. Also, the apxs command may be broken for installing the
-    module.
+    devel" RPM, though it may not work properly for installation.
 
     If the apache installation fails:
 
@@ -395,7 +394,8 @@ TODO
         connection, etc.
 
     *   Add option to check the amount of memory in use and exit when it gets
-        too high.
+        too high. Currently the only way to control memory usage is
+        indirectly via the MaxRuns option.
 
     *   Port to Windows NT
 
@@ -409,9 +409,6 @@ TODO
 
     *   Add frontend disk caching so that slow clients don't tie up backends.
         This would be incompatible with I_SENDFD.
-
-    *   When invalidating a group, send an alarm signal to all frontends waiting
-        in the queue.
 
 MAILING LIST
     speedycgi@newlug.org. Subscribe by sending a message to speedycgi-

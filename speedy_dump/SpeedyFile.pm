@@ -10,7 +10,7 @@ sub new { my($class, $fname) = @_;
 
 sub fname { my $self = shift;
     $self->{fname} ||=
-	sprintf('%s.0.%x.F', ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
+	sprintf('%s.1.%x.F', ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
 }
 
 sub data { my $self = shift;
@@ -62,7 +62,7 @@ sub new { my($class, $data, $type) = @_;
 }
 
 sub fieldnames { my $self = shift;
-    $self->{fieldnames} ||= [@{$self->{type}. "'fieldnames"}];
+    $self->{fieldnames} ||= [grep {/./} @{$self->{type}. "'fieldnames"}];
 }
 
 sub value { my $self = shift;

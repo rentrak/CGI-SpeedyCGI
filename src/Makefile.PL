@@ -17,7 +17,6 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #
 
-use Config;
 use SpeedyMake qw(@src_generated);
 
 my $gen = join(' ', @src_generated);
@@ -30,7 +29,7 @@ print M <<END;
 all: ${gen}
 
 ${gen}: optdefs optdefs.pl SpeedyCGI.src
-	perl optdefs.pl $Config{installbin}
+	perl optdefs.pl \$(SPEEDY_INSTALL_BIN)
 
 clean:
 	rm -f ${gen} Makefile

@@ -25,3 +25,4 @@ int speedy_util_argc(const char * const * argv);
 int speedy_util_getpid();
 void speedy_util_die(const char *fmt, ...);
 int speedy_util_kill(pid_t pid, int sig);
+int speedy_util_execvp(const char *filename, const char *const *argv);

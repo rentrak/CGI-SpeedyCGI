@@ -30,7 +30,6 @@ use Exporter;
 use strict;
 use ExtUtils::MakeMaker;
 use ExtUtils::Embed;
-use Config qw(%Config);
 use vars qw(@src_generated %write_makefile_common);
 
 @src_generated = qw(
@@ -165,14 +164,15 @@ sub speedy_h_cmds { my $class = shift;
     );
 }
 
-sub optdefs_cmds { my $class = shift;
-    my $gen = join(' ', map {"../src/$_"} @src_generated);
+sub optdefs_cmds { my($class, $dir) = @_;
+    $dir ||= '../src';
+    my $gen = join(' ', map {"$dir/$_"} @src_generated);
     "
-${gen}: ../src/Makefile
-	cd ../src; \$(MAKE)
+${gen}: $dir/Makefile
+	cd $dir; \$(MAKE) SPEEDY_INSTALL_BIN=\$(INSTALLBIN)
 
-../src/Makefile: ../src/Makefile.PL
-	cd ../src; \$(PERL) Makefile.PL
+$dir/Makefile: $dir/Makefile.PL
+	cd ${dir}; \$(PERL) Makefile.PL
     ";
 }
 

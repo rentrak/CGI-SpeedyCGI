@@ -18,6 +18,7 @@ sub doit {
 }
 
 @first = &doit;
+sleep 1;
 @second = &doit;
 
 ## print "first=",join(":", @first), "\n";

@@ -95,6 +95,9 @@ int main(int argc, char **argv, char **_junk) {
 	speedy_poll_set(&pi, cbs[i]->rdfd, SPEEDY_POLLIN);
     }
 
+    /* Try to write our env/argv without dropping into select */
+    speedy_poll_set(&pi, cbs[0]->wrfd, SPEEDY_POLLOUT);
+
     /* Copy streams */
     for (did_shutdown = 0;;) {
 

@@ -52,7 +52,7 @@ CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 <HR>
 <H1><A NAME="SYNOPSIS">SYNOPSIS</A></H1>
 <P>
-<PRE> #!/usr/local/bin/speedy
+<PRE> #!/usr/bin/speedy
 </PRE>
 <P>
 <PRE> ### Your CGI Script Here
@@ -91,13 +91,13 @@ many cases as simple has changing the interpreter line at the top of the
 script from
 
 <P>
-<PRE>    #!/usr/local/bin/perl
+<PRE>    #!/usr/bin/perl
 </PRE>
 <P>
 to
 
 <P>
-<PRE>    #!/usr/local/bin/speedy
+<PRE>    #!/usr/bin/speedy
 </PRE>
 <P>
 After the script is initially run, instead of exiting, SpeedyCGI keeps the
@@ -137,10 +137,10 @@ that SpeedyCGI specific options can be passed in after a ``--''.
 For example the line:
 
 <P>
-<PRE>        #!/usr/local/bin/speedy -w -- -t300
+<PRE>        #!/usr/bin/speedy -w -- -t300
 </PRE>
 <P>
-at the top of your script will call SpeedyCGI with the perl option ``<CODE>-w</CODE>'' and will pass the ``<CODE>-t</CODE>'' option to speedy, setting the Timeout option to 300 seconds.
+at the top of your script will call SpeedyCGI with the perl option ``<CODE>-w</CODE>'' and will pass the ``<CODE>-t</CODE>'' option to speedy, setting the Timeout to 300 seconds.
 
 </DL>
 <DL>
@@ -391,8 +391,8 @@ mod_speedycgi module if you have ``apxs'' in your path.
 <HR>
 <H2><A NAME="Install_in_a_Different_Directory">Install in a Different Directory</A></H2>
 <P>
-To install in a different directory, change the first line in the standard
-install to:
+To install in a different directory, change the first line in
+<A HREF="#Standard_Install">Standard Install</A> to:
 
 <P>
 <PRE>    perl Makefile.PL PREFIX=/somewhere
@@ -407,8 +407,7 @@ module under /somewhere/lib.
 <P>
 To use the optional apache mod_speedycgi module you must have the ``apxs''
 command in your path. Redhat includes this command with the
-``apache-devel'' RPM. Also, the apxs command may be broken for installing
-the module.
+``apache-devel'' RPM, though it may not work properly for installation.
 
 <P>
 If the apache installation fails:
@@ -601,7 +600,8 @@ Should be able to have the perl prog wait for a new connection, etc.
 <LI>
 <P>
 Add option to check the amount of memory in use and exit when it gets too
-high.
+high. Currently the only way to control memory usage is indirectly via the
+MaxRuns option.
 
 </UL>
 <UL>
@@ -631,13 +631,6 @@ code.
 <P>
 Add frontend disk caching so that slow clients don't tie up backends. This
 would be incompatible with I_SENDFD.
-
-</UL>
-<UL>
-<LI>
-<P>
-When invalidating a group, send an alarm signal to all frontends waiting in
-the queue.
 
 </UL>
 <P>

@@ -22,7 +22,7 @@ package CGI::SpeedyCGI;
 
 use strict;
 use vars qw($VERSION);
-$VERSION = '2.0';
+$VERSION = '2.0.1';
 
 ## use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 ## 
@@ -84,7 +84,7 @@ CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 
 =head1 SYNOPSIS
 
- #!/usr/local/bin/speedy
+ #!/usr/bin/speedy
 
  ### Your CGI Script Here
  print "Content-type: text/html\n\nHello World!\n";
@@ -115,11 +115,11 @@ makes them run much more quickly.  Converting scripts to use SpeedyCGI is
 in many cases as simple has changing the interpreter line at the top of
 the script from
 
-    #!/usr/local/bin/perl
+    #!/usr/bin/perl
 
 to
 
-    #!/usr/local/bin/speedy
+    #!/usr/bin/speedy
 
 After the script is initially run, instead of exiting, SpeedyCGI keeps the
 perl interpreter running in memory.  During subsequent runs, this interpreter
@@ -152,11 +152,11 @@ exception that SpeedyCGI specific options can be passed in after a "--".
 
 For example the line:
 
-	#!/usr/local/bin/speedy -w -- -t300
+	#!/usr/bin/speedy -w -- -t300
 
 at the top of your script will call SpeedyCGI with the perl option
 "C<-w>" and will pass the "C<-t>" option to speedy, setting the
-Timeout option to 300 seconds.
+Timeout to 300 seconds.
 
 =back
 
@@ -298,8 +298,8 @@ the mod_speedycgi module if you have "apxs" in your path.
 
 =head2 Install in a Different Directory
 
-To install in a different directory, change the first line in the
-standard install to:
+To install in a different directory, change the first line in
+L<"Standard Install"> to:
 
     perl Makefile.PL PREFIX=/somewhere
 
@@ -310,7 +310,7 @@ module under /somewhere/lib.
 
 To use the optional apache mod_speedycgi module you must have the "apxs"
 command in your path.  Redhat includes this command with the "apache-devel"
-RPM.  Also, the apxs command may be broken for installing the module.
+RPM, though it may not work properly for installation.
 
 If the apache installation fails:
 
@@ -512,7 +512,8 @@ Should be able to have the perl prog wait for a new connection, etc.
 =item *
 
 Add option to check the amount of memory in use and exit when it gets
-too high.
+too high.  Currently the only way to control memory usage is indirectly
+via the MaxRuns option.
 
 =back
 
@@ -549,15 +550,6 @@ This feature is in the temp-file structure, but not yet implemented in code.
 
 Add frontend disk caching so that slow clients don't tie up backends.
 This would be incompatible with I_SENDFD.
-
-=back
-
-=over
-
-=item *
-
-When invalidating a group, send an alarm signal to all frontends
-waiting in the queue.
 
 =back
 

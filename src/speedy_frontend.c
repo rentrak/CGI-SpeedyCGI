@@ -35,7 +35,7 @@ static void backend_spawn(slotnum_t gslotnum) {
     /* Fork */
     pid = fork();
     if (pid == -1) {
-	speedy_file_close();
+	speedy_file_set_state(FS_CLOSED);
 	speedy_util_die("fork failed");
     }
 
@@ -56,16 +56,18 @@ static void backend_spawn(slotnum_t gslotnum) {
 	setsid();
 
 	/* Exec the backend */
-	speedy_execvp(argv[0], argv);
+	speedy_util_execvp(argv[0], argv);
 
 	/* Failed.  Try the original argv[0] + "_backend" */
 	{
 	    const char *orig_file = speedy_opt_orig_argv()[0];
-	    char *fname =
-		speedy_malloc(strlen(orig_file) + sizeof(BE_SUFFIX) + 1);
+	    if (orig_file && *orig_file) {
+		char *fname =
+		    speedy_malloc(strlen(orig_file) + sizeof(BE_SUFFIX) + 1);
 
-	    sprintf(fname, "%s%s", orig_file, BE_SUFFIX);
-	    speedy_execvp(fname, argv);
+		sprintf(fname, "%s%s", orig_file, BE_SUFFIX);
+		speedy_util_execvp(fname, argv);
+	    }
 	}
 	speedy_util_die(argv[0]);
     }
@@ -167,13 +169,43 @@ void speedy_frontend_dispose(slotnum_t gslotnum, slotnum_t fslotnum) {
     }
 }
 
-static void frontend_check(slotnum_t gslotnum, slotnum_t fslotnum) {
-    while (fslotnum &&
-	speedy_util_kill(FILE_SLOT(fe_slot, fslotnum).pid, 0) == -1)
-    {
-	slotnum_t prev = FILE_SLOT(fe_slot, fslotnum).prev_slot;
+/* Go up the fe_wait list, going to the next group if we're at the
+ * begininng of the list.  Wrap to the first group if we go off the end
+ * of the group list.  Worst case we wrap around and return ourself.
+ */
+static void fe_prev_slot(slotnum_t *gslotnum, slotnum_t *fslotnum) {
+    *fslotnum = FILE_SLOT(fe_slot, *fslotnum).prev_slot;
+    while (!*fslotnum) {
+	if (!(*gslotnum = FILE_SLOT(gr_slot, *gslotnum).next_slot) &&
+	    !(*gslotnum = FILE_HEAD.group_head))
+	{
+	    DIE_QUIET("Group list or frontend lists are corrupt");
+	}
+	*fslotnum = FILE_SLOT(gr_slot, *gslotnum).fe_tail;
+    }
+}
+
+static void frontend_check_prev(slotnum_t gslotnum, slotnum_t fslotnum) {
+    fe_prev_slot(&gslotnum, &fslotnum);
+
+    while (speedy_util_kill(FILE_SLOT(fe_slot, fslotnum).pid, 0) == -1) {
+	slotnum_t g_prev = gslotnum, f_prev = fslotnum;
+
+	/* Must do "prev" function while this slot/group is still valid */
+	fe_prev_slot(&g_prev, &f_prev);
+
+	/* This frontend is not running so dispose of it */
 	speedy_frontend_dispose(gslotnum, fslotnum);
-	fslotnum = prev;
+
+	/* Try to remove this group if possible */
+	speedy_group_cleanup(gslotnum);
+
+	/* If we wrapped around to ourself, then all done */
+	if (f_prev == fslotnum)
+	    break;
+
+	gslotnum = g_prev;
+	fslotnum = f_prev;
     }
 }
 
@@ -181,19 +213,19 @@ static void frontend_check(slotnum_t gslotnum, slotnum_t fslotnum) {
  * if we're at the beginning
  */
 static void frontend_ping(slotnum_t gslotnum, slotnum_t fslotnum) {
-    fe_slot_t *fslot = &FILE_SLOT(fe_slot, fslotnum);
 
-    if (fslot->prev_slot) {
-	frontend_check(gslotnum, fslot->prev_slot);
+    /* Check the frontend previous to us.  This may remove it */
+    frontend_check_prev(gslotnum, fslotnum);
 
-	/* If we're not at the beginning of the list, then all done */
-	if (fslot->prev_slot)
-	    return;
-    }
+    /* If we're not at the beginning of the list, then all done */
+    if (FILE_SLOT(fe_slot, fslotnum).prev_slot)
+	return;
+
+    /* Do a check of backends */
     if (!backend_check(gslotnum, 1)) {
 	speedy_frontend_dispose(gslotnum, fslotnum);
 	speedy_group_cleanup(gslotnum);
-	speedy_file_close();
+	speedy_file_set_state(FS_CLOSED);
 	DIE_QUIET("Cannot spawn backend process");
     }
 }
@@ -330,7 +362,7 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
 	frontend_ping(gslotnum, fslotnum);
 
 	/* Unlock the file */
-	speedy_file_unlock();
+	speedy_file_set_state(FS_HAVESLOTS);
 
 	/* Set an alarm for one-second. */
 	alarm(OPTVAL_BECHECKTIMEOUT);
@@ -339,15 +371,15 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
 	sig_wait();
 
 	/* Find out if our file changed.  Do this while unlocked */
-	now = time(NULL);
-	file_changed = 0;
-	if (now - last_stat > OPTVAL_RESTATTIMEOUT) {
+	if ((now = time(NULL)) - last_stat > OPTVAL_RESTATTIMEOUT) {
 	    last_stat = now;
 	    file_changed = speedy_script_changed();
+	} else {
+	    file_changed = 0;
 	}
 
 	/* Map in & lock down temp file */
-	speedy_file_lock();
+	speedy_file_set_state(FS_WRITING);
 
 	/* File may have been mmap'ed elsewhere so get fresh pointers */
 	fslot = &FILE_SLOT(fe_slot, fslotnum);
@@ -359,14 +391,18 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
 	}
     }
 
-    /* Remove our FE slot from the queue.  */
-    speedy_frontend_dispose(gslotnum, fslotnum);
+    {
+	int at_front = !fslot->prev_slot;
 
-    /* If we were at the beginning of the list and there are other fe's
-     * waiting,, we should assist them by starting more backends.
-     */
-    if (retval && gslot->fe_wait)
-	(void) backend_check(gslotnum, 0);
+	/* Remove our FE slot from the queue.  */
+	speedy_frontend_dispose(gslotnum, fslotnum);
+
+	/* If we were at the beginning of the list and there are other fe's
+	 * waiting, we should assist them by starting more backends.
+	 */
+	if (retval && at_front)
+	    (void) backend_check(gslotnum, 0);
+    }
 
     /* Put sighandlers back to their original state */
     sig_handler_teardown();
@@ -374,15 +410,16 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
     return retval;
 }
 
-static pid_t get_a_backend() {
+static slotnum_t get_a_backend(pid_t *pid) {
     slotnum_t sslotnum, gslotnum, bslotnum = 0;
-    pid_t retval = 0;
 
     /* Map in & lock down temp file */
-    speedy_file_lock();
+    speedy_file_set_state(FS_LOCKED);
 
     /* Locate the group and script slot */
     speedy_script_find(&gslotnum, &sslotnum);
+
+    speedy_file_set_state(FS_WRITING);
 
     /* Try to quickly grab a backend without queueing */
     if (!FILE_SLOT(gr_slot, gslotnum).fe_wait)
@@ -391,36 +428,48 @@ static pid_t get_a_backend() {
     /* If that failed, use the queue */
     if (!bslotnum)
 	bslotnum = get_a_backend_hard(gslotnum, sslotnum);
-    
+
     if (bslotnum)
-	retval = FILE_SLOT(be_slot, bslotnum).pid;
+	*pid = FILE_SLOT(be_slot, bslotnum).pid;
     
     /* Clean up the group if necessary */
     speedy_group_cleanup(gslotnum);
 
     /* Unlock the file */
-    speedy_file_unlock();
+    speedy_file_set_state(FS_OPEN);
 
-    return retval;
+    return bslotnum;
 }
 
 
-void speedy_frontend_connect(const struct stat *stbuf, int *s, int *e)
-{
-    slotnum_t bslotnum;
+void speedy_frontend_connect(const struct stat *stbuf, int *s, int *e) {
 
-    /* Stat the script */
-    speedy_script_stat(stbuf);
+    /* Create sockets in preparation for connect.  This may take a while */
+    speedy_ipc_connect_prepare(s, e);
 
     while (1) {
+	slotnum_t bslotnum;
+	pid_t pid;
+
+	/* Stat the script */
+	speedy_script_stat(stbuf);
+
+	/* Only used the provided stat buf the first time through */
+	stbuf = NULL;
 
 	/* Find a backend */
-	if ((bslotnum = get_a_backend())) {
+	if ((bslotnum = get_a_backend(&pid))) {
 
 	    /* Try to talk to this backend.  If successful, return */
-	    if (speedy_ipc_connect(bslotnum, s, e)) return;
+	    if (speedy_ipc_connect(bslotnum, *s, *e))
+		return;
+
+	    /* Backend is not responding.  Kill it to make sure it's gone */
+	    speedy_util_kill(pid, SIGKILL);
+
+	    /* Connect failed, so we'll need new sockets */
+	    speedy_ipc_connect_prepare(s, e);
 	}
-	speedy_script_stat(NULL);
     }
 }
 

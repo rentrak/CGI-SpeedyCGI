@@ -23,5 +23,5 @@ slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum);
 void speedy_backend_be_wait_put(slotnum_t gslotnum, slotnum_t bslotnum);
 void speedy_backend_kill(slotnum_t gslotnum, slotnum_t bslotnum);
 void speedy_backend_check(slotnum_t gslotnum, slotnum_t bslotnum);
-void speedy_backend_check_first();
+void speedy_backend_check_next(slotnum_t gslotnum, slotnum_t bslotnum);
 slotnum_t speedy_backend_create_slot(slotnum_t gslotnum, pid_t pid);

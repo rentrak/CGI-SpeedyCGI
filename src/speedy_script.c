@@ -58,6 +58,7 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
     scr_slot_t *sslot = NULL;
 
     /* Find the slot for this script in the file */
+    speedy_file_set_state(FS_LOCKED);
     while (1) {
 	for (gslotnum = FILE_HEAD.group_head, sslotnum = 0; gslotnum;
 	     gslotnum = gslot->next_slot)
@@ -84,15 +85,17 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
 	    break;
 	
 	/* Read the shbang line from the file.  Might hang, so unlock first */
-	speedy_file_unlock();
+	speedy_file_set_state(FS_OPEN);
 	speedy_opt_read_shbang();
-	speedy_file_lock();
+	speedy_file_set_state(FS_LOCKED);
     }
 
     /* If mtime has changed, throw away this group */
     if (sslotnum && sslot->mtime != script_stat.st_mtime) {
 	slotnum_t bslotnum, next_slot;
 	be_slot_t *bslot;
+
+	speedy_file_set_state(FS_WRITING);
 
 	/* Invalidate this group */
 	speedy_group_invalidate(gslotnum);
@@ -104,17 +107,18 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
 	    speedy_backend_kill(gslotnum, bslotnum);
 	}
 
-	/* Shutdown any dead BE's that are not idle.  This will also
-	 * dispose of the group if necessary
-	 */
+	/* Shutdown any dead BE's that are not idle. */
 	speedy_backend_check(gslotnum, gslot->be_head);
+
+	/* Try to get rid of the group altogether */
+	speedy_group_cleanup(gslotnum);
 
 	gslotnum = sslotnum = 0;
     }
 
     /* If no slot found for this script, create one */
     if (!sslotnum) {
-	/* Create a new slot for the script */
+	speedy_file_set_state(FS_WRITING);
 	sslotnum = speedy_slot_alloc();
 	sslot = &FILE_SLOT(scr_slot, sslotnum);
 	sslot->dev_num = script_stat.st_dev;
@@ -127,6 +131,7 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
 
     /* Group not found, create a new one */
     if (!gslotnum) {
+	speedy_file_set_state(FS_WRITING);
 	gslotnum = speedy_slot_alloc();
 	gslot = &FILE_SLOT(gr_slot, gslotnum);
 	gslot->be_head = gslot->be_wait = gslot->fe_wait =
@@ -135,6 +140,8 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
 	gslot->next_slot = FILE_HEAD.group_head;
 	FILE_HEAD.group_head = SLOT_CHECK(gslotnum);
     }
+
+    speedy_file_set_state(FS_LOCKED);
 
     *gslotnum_p = gslotnum;
     *sslotnum_p = sslotnum;

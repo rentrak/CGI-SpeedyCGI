@@ -35,10 +35,11 @@
 #   define PREF_FD_CONNECT_E -1
 #endif
 
-void speedy_ipc_listen();
-void speedy_ipc_listen_fixfd();
+void speedy_ipc_listen(slotnum_t slotnum);
+void speedy_ipc_listen_fixfd(slotnum_t slotnum);
 void speedy_ipc_unlisten();
-int speedy_ipc_connect(pid_t pid, int *s, int *e);
+int speedy_ipc_connect(slotnum_t slotnum, int s, int e);
+void speedy_ipc_connect_prepare(int *s, int *e);
 int speedy_ipc_accept_ready(int wakeup);
 int speedy_ipc_accept(int wakeup, int *s, int *e);
-void speedy_ipc_cleanup(pid_t pid);
+void speedy_ipc_cleanup(slotnum_t slotnum);

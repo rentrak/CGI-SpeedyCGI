@@ -28,6 +28,14 @@ static int		maplen;
 static int		file_locked;
 static char		*file_name;
 static struct stat	file_stat;
+static int		cur_state;
+static time_t		last_reopen;
+static struct timeval	file_create_time;
+
+#define fillin_fl(fl)		\
+    fl.l_whence	= SEEK_SET;	\
+    fl.l_start	= 0;		\
+    fl.l_len	= 0
 
 static void file_unmap() {
     if (maplen) {
@@ -51,13 +59,26 @@ static void file_map(unsigned int len) {
     }
 }
 
+static void file_unlock() {
+    struct flock fl;
+
+    if (!file_locked) return;
+
+    FILE_HEAD.file_corrupt = 0;
+
+    fillin_fl(fl);
+    fl.l_type = F_UNLCK;
+    if (fcntl(file_fd, F_SETLK, &fl) == -1) speedy_util_die("unlock file");
+    file_locked = 0;
+}
+
 /* Only call this if you're sure the fd is not suspect */
-static void file_close() {
+static void file_close2() {
     if (fd_is_suspect) {
-	DIE_QUIET("file_close: assertion failed - fd_is_suspect");
+	DIE_QUIET("file_close2: assertion failed - fd_is_suspect");
     }
 
-    speedy_file_unlock();
+    file_unlock();
     file_unmap();
     if (file_fd != -1) {
 	(void) close(file_fd);
@@ -82,25 +103,11 @@ static void fix_suspect_fd() {
     }
 }
 
-#define fillin_fl(fl)		\
-    fl.l_whence	= SEEK_SET;	\
-    fl.l_start	= 0;		\
-    fl.l_len	= 0
 
-
-/* Stat our file into file_stat.  If different file, die unless different_ok */
-static void get_stat(int different_ok) {
-    struct stat stbuf;
-
-    if (fstat(file_fd, &stbuf) == -1)
+/* Stat our file into file_stat.  Possibly die if different file */
+static void get_stat() {
+    if (fstat(file_fd, &file_stat) == -1)
 	speedy_util_die("fstat");
-
-    if (!different_ok &&
-	(stbuf.st_ino != file_stat.st_ino || stbuf.st_dev != file_stat.st_dev))
-    {
-	DIE_QUIET("temp file is corrupt");
-    }
-    speedy_memcpy(&file_stat, &stbuf, sizeof(stbuf));
 }
 
 static void remove_file() {
@@ -108,14 +115,20 @@ static void remove_file() {
     unlink(file_name);
 }
 
-void speedy_file_lock() {
+static void file_lock() {
     struct flock fl;
-    static int been_here_before;
     int tries = 5;
+    time_t now;
 
     if (file_locked) return;
 
     fix_suspect_fd();
+
+    /* Re-open the temp file occasionally */
+    if ((now = time(NULL)) - last_reopen > OPTVAL_RESTATTIMEOUT) {
+	last_reopen = now;
+	file_close2();
+    }
 
     while (tries--) {
 	/* If file is not open, open it */
@@ -138,7 +151,7 @@ void speedy_file_lock() {
 	if (fcntl(file_fd, F_SETLKW, &fl) == -1) speedy_util_die("lock file");
 
 	/* Fstat the file, now that it's locked down */
-	get_stat(!been_here_before);
+	get_stat();
 
 	/* Map into memory */
 	file_map(file_stat.st_size);
@@ -150,62 +163,66 @@ void speedy_file_lock() {
 	{
 	    if (ftruncate(file_fd, file_stat.st_size + FILE_ALLOC_CHUNK) == -1)
 		speedy_util_die("ftruncate");
-	    get_stat(!been_here_before);
+	    get_stat();
 	    file_map(file_stat.st_size);
+	}
+
+	/* Initialize file's create time if necessary */
+	if (!FILE_HEAD.create_time.tv_sec)
+	    (void) gettimeofday(&(FILE_HEAD.create_time), NULL);
+
+	/* Initialize our copy of the create-time if necessary */
+	if (!file_create_time.tv_sec) {
+	    file_create_time.tv_sec  = FILE_HEAD.create_time.tv_sec;
+	    file_create_time.tv_usec = FILE_HEAD.create_time.tv_usec;
+	}
+	/* Check whether this file is a different file */
+	else if (cur_state >= FS_HAVESLOTS &&
+	    (file_create_time.tv_sec  != FILE_HEAD.create_time.tv_sec ||
+	     file_create_time.tv_usec != FILE_HEAD.create_time.tv_usec))
+	{
+	    DIE_QUIET("temp file is corrupt");
 	}
 
 	/* If file is corrupt (didn't finish all writes), remove it */
 	if (FILE_HEAD.file_corrupt)
 	    remove_file();
 
-	/* If file is valid, then all done */
-	if (FILE_HEAD.file_removed == 0)
+	/* If file has not been removed then all done */
+	if (!FILE_HEAD.file_removed)
 	    break;
 
 	/* File is invalid */
-	if (been_here_before) {
+	if (cur_state >= FS_HAVESLOTS) {
 	    /* Too late for this proc - slotnums have changed, can't recover */
 	    DIE_QUIET("temp file is invalid");
 	} else {
-	    /* First time opening the file, so try it again - bad luck -
-	     * the file was unlinked after we opened it, but before
-	     * we locked it
+	    /* Bad luck - the file was unlinked after we opened it, but before
+	     * we locked it.  Try again.
 	     */
-	    file_close();
+	    file_close2();
 	}
     }
     if (!tries) {
 	DIE_QUIET("could not open temp file");
     }
-    been_here_before = 1;
     file_locked = 1;
-    FILE_HEAD.file_corrupt = 1;
-}
-
-void speedy_file_unlock() {
-    struct flock fl;
-
-    if (!file_locked) return;
-
-    FILE_HEAD.file_corrupt = 0;
-
-    fillin_fl(fl);
-    fl.l_type = F_UNLCK;
-    if (fcntl(file_fd, F_SETLK, &fl) == -1) speedy_util_die("unlock file");
-    file_locked = 0;
 }
 
 void speedy_file_fd_is_suspect() {
     fd_is_suspect = 1;
 }
 
-void speedy_file_close() {
-    speedy_file_lock();
+static void file_close() {
     /* If no groups left, remove the file */
-    if (!FILE_HEAD.group_head)
-	remove_file();
-    file_close();
-    if (file_name) speedy_free(file_name);
+    if (cur_state >= FS_HAVESLOTS) {
+	file_lock();
+	if (!FILE_HEAD.group_head)
+	    remove_file();
+    }
+    file_close2();
+    if (file_name)
+	speedy_free(file_name);
     file_name = NULL;
 }
 
@@ -213,3 +230,31 @@ int speedy_file_size() {
     return maplen;
 }
 
+void speedy_file_set_state(int new_state) {
+    switch(new_state) {
+    case FS_CLOSED:
+	file_close();
+	file_create_time.tv_sec = 0;
+	break;
+    case FS_OPEN:
+	file_unlock();
+	file_create_time.tv_sec = 0;
+	break;
+    case FS_HAVESLOTS:
+	file_unlock();
+	break;
+    case FS_LOCKED:
+	file_lock();
+	FILE_HEAD.file_corrupt = 0;
+	break;
+    case FS_WRITING:
+	file_lock();
+	FILE_HEAD.file_corrupt = 1;
+	break;
+    }
+    cur_state = new_state;
+}
+
+void speedy_file_need_reopen() {
+    last_reopen = 0;
+}

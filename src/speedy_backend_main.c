@@ -41,16 +41,18 @@ int main(int argc, char **argv, char **_junk) {
     speedy_script_stat(NULL);
 
     /* Lock/mmap our temp file */
-    speedy_file_lock();
+    speedy_file_set_state(FS_LOCKED);
 
     /* Locate our script and group */
     speedy_script_find(&gslotnum, &sslotnum);
+
+    speedy_file_set_state(FS_WRITING);
 
     /* Get a backend slot */
     bslotnum = speedy_backend_create_slot(gslotnum, speedy_util_getpid());
 
     /* Done with the temp file for now */
-    speedy_file_unlock();
+    speedy_file_set_state(FS_HAVESLOTS);
 
     /* Run the perl backend */
     speedy_perl_run(gslotnum, bslotnum);
