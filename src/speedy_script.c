@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -29,7 +29,12 @@ void speedy_script_close() {
     last_open = 0;
 }
 
-int speedy_script_open() {
+void speedy_script_missing() {
+    DIE_QUIET("Missing script filename.  "
+	"Type \"perldoc CGI::SpeedyCGI\" for SpeedyCGI documentation.");
+}
+
+int speedy_script_open_failure() {
     time_t now = speedy_util_time();
     const char *fname;
 
@@ -37,32 +42,45 @@ int speedy_script_open() {
 
 	speedy_script_close();
 
-	if (!(fname = speedy_opt_script_argv()[0]))
-	    DIE_QUIET("Missing script filename");
+	if (!(fname = speedy_opt_script_fname()))
+	    return 1;
 
-	if ((script_fd = open(fname, O_RDONLY)) == -1)
-	    speedy_util_die(fname);
+	if ((script_fd = speedy_util_open_stat(fname, &script_stat)) == -1)
+	    return 2;
 
-	(void) fstat(script_fd, &script_stat);
 	last_open = now;
+    }
+    return 0;
+}
+
+int speedy_script_open() {
+    switch (speedy_script_open_failure()) {
+	case 1:
+	    speedy_script_missing();
+	    break;
+	case 2:
+	    speedy_util_die(speedy_opt_script_fname());
+	    break;
     }
     return script_fd;
 }
 
+#ifdef SPEEDY_FRONTEND
 int speedy_script_changed() {
     struct stat stbuf;
 
     if (!last_open)
 	return 0;
-    speedy_memcpy(&stbuf, &script_stat, sizeof(script_stat));
+    stbuf = script_stat;
     (void) speedy_script_open();
     return
 	stbuf.st_mtime != script_stat.st_mtime ||
 	stbuf.st_ino != script_stat.st_ino ||
 	stbuf.st_dev != script_stat.st_dev;
 }
+#endif
 
-struct stat *speedy_script_getstat() {
+const struct stat *speedy_script_getstat() {
     speedy_script_open();
     return &script_stat;
 }
@@ -71,6 +89,8 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
     slotnum_t gslotnum, sslotnum;
     gr_slot_t *gslot = NULL;
     scr_slot_t *sslot = NULL;
+    
+    (void) speedy_script_getstat();
 
     /* Find the slot for this script in the file */
     speedy_file_set_state(FS_LOCKED);
@@ -98,57 +118,70 @@ void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p) {
 
     /* If mtime has changed, throw away this group */
     if (sslotnum && sslot->mtime != script_stat.st_mtime) {
-	slotnum_t bslotnum, next_slot;
-	be_slot_t *bslot;
-
 	speedy_file_set_state(FS_WRITING);
 
 	/* Invalidate this group */
 	speedy_group_invalidate(gslotnum);
 
 	/* Shutdowns all the BE's in the idle queue */
-	for (bslotnum = gslot->be_wait; bslotnum; bslotnum = next_slot) {
-	    bslot = &FILE_SLOT(be_slot, bslotnum);
-	    next_slot = bslot->be_wait_next;
-	    speedy_backend_kill(gslotnum, bslotnum);
+	speedy_backend_kill_idle(gslotnum);
+
+	if (FILE_SLOT(gr_slot, gslotnum).be_head) {
+	    /* Shutdown any dead BE's.  May remove the group */
+	    speedy_backend_check(gslotnum, gslot->be_head);
+	} else {
+	    /* Try to remove the group directly */
+	    speedy_group_cleanup(gslotnum);
 	}
-
-	/* Shutdown any dead BE's that are not idle. */
-	speedy_backend_check(gslotnum, gslot->be_head);
-
-	/* Try to get rid of the group altogether */
-	speedy_group_cleanup(gslotnum);
 
 	gslotnum = sslotnum = 0;
     }
 
-    /* If no slot found for this script, create one */
+    /* Slot not found... */
     if (!sslotnum) {
 	speedy_file_set_state(FS_WRITING);
+
+	/* Try to find our group by name... */
+	gslotnum = speedy_group_findname();
+
+	/* Group not found so create one */
+	if (!gslotnum) {
+	    speedy_file_set_state(FS_WRITING);
+	    gslotnum = speedy_group_create();
+	}
+
+	/* Create a new slot */
 	sslotnum = speedy_slot_alloc();
 	sslot = &FILE_SLOT(scr_slot, sslotnum);
 	sslot->dev_num = script_stat.st_dev;
 	sslot->ino_num = script_stat.st_ino;
 	sslot->mtime = script_stat.st_mtime;
-	sslot->next_slot = 0;
 
-	/* Need to find our group by name... */
-    }
-
-    /* Group not found, create a new one */
-    if (!gslotnum) {
-	speedy_file_set_state(FS_WRITING);
-	gslotnum = speedy_slot_alloc();
+	/* Add to this group */
 	gslot = &FILE_SLOT(gr_slot, gslotnum);
-	gslot->be_head = gslot->be_wait = gslot->fe_wait =
-	    gslot->fe_tail = gslot->name = 0;
+	sslot->next_slot = gslot->script_head;
 	gslot->script_head = sslotnum;
-	gslot->next_slot = FILE_HEAD.group_head;
-	FILE_HEAD.group_head = SLOT_CHECK(gslotnum);
     }
 
     speedy_file_set_state(FS_LOCKED);
 
     *gslotnum_p = gslotnum;
     *sslotnum_p = sslotnum;
+}
+
+static SpeedyMapInfo *script_mapinfo;
+
+void speedy_script_munmap() {
+    if (script_mapinfo) {
+	speedy_util_mapout(script_mapinfo);
+	script_mapinfo = NULL;
+    }
+}
+
+SpeedyMapInfo *speedy_script_mmap(int max_size) {
+    speedy_script_munmap();
+    script_mapinfo = speedy_util_mapin(
+	speedy_script_open(), max_size, speedy_script_getstat()->st_size
+    );
+    return script_mapinfo;
 }

@@ -5,27 +5,34 @@
 
 my $scr = 't/scripts/mungefds';
 
-print "1..1\n";
+print "1..2\n";
 
+system("$ENV{SPEEDY} $scr >/dev/null");
 utime time, time, $scr;
 sleep 1;
 
-sub doit {
-    open(F, "$ENV{SPEEDY} $scr |");
+sub doit { my $open_dev_null = shift;
+    open(F, "$ENV{SPEEDY} $scr $open_dev_null |");
     my @lines = <F>;
     close(F);
     return @lines;
 }
 
-@first = &doit;
-sleep 1;
-@second = &doit;
+sub doit2 { my $open_dev_null = shift;
+    my @first = &doit($open_dev_null);
+    sleep 1;
+    my @second = &doit($open_dev_null);
 
-## print "first=",join(":", @first), "\n";
-## print "second=",join(":", @second), "\n";
+    #print STDERR "first=",join(":", @first), "\n";
+    #print STDERR "second=",join(":", @second), "\n";
 
-if (@first != 1 || $first[0] ne $second[0]) {
-    print "fail\n";
-} else {
-    print "ok\n";
+    if (@first != 1 || $first[0] ne $second[0]) {
+	print "fail\n";
+    } else {
+	print "ok\n";
+    }
 }
+
+&doit2(0);
+sleep 1;
+&doit2(1);

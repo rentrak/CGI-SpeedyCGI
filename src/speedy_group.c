@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,15 +19,6 @@
 
 #include "speedy.h"
 
-static void setname(gr_slot_t *gslot, const char *bytes, int len) {
-    if (!gslot->name) {
-	gslot->name = speedy_slot_alloc();
-    }
-    speedy_memcpy(
-	FILE_SLOT(grnm_slot, gslot->name).name, bytes, min(len, GR_NAMELEN)
-    );
-}
-
 static void remove_scripts(gr_slot_t *gslot) {
     slotnum_t snum, next;
 
@@ -40,27 +31,15 @@ static void remove_scripts(gr_slot_t *gslot) {
 
 void speedy_group_invalidate(slotnum_t gslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
-    slotnum_t bslotnum, next_slot;
 
     /* Remove scripts from the script list */
     remove_scripts(gslot);
 
     /* Remove the group name if any */
-    speedy_slot_free(gslot->name);
-
-    /* Shutdowns all the BE's in the idle queue */
-    for (bslotnum = gslot->be_wait; bslotnum; bslotnum = next_slot) {
-	next_slot = FILE_SLOT(be_slot, bslotnum).be_wait_next;
-	speedy_backend_kill(gslotnum, bslotnum);
+    if (gslot->name) {
+	speedy_slot_free(gslot->name);
+	gslot->name = 0;
     }
-}
-
-int speedy_group_isvalid(slotnum_t gslotnum) {
-    return FILE_SLOT(gr_slot, gslotnum).script_head;
-}
-
-void speedy_group_setname(slotnum_t gslotnum, const char *name) {
-    setname(&FILE_SLOT(gr_slot, gslotnum), name, strlen(name)+1);
 }
 
 void speedy_group_sendsigs(slotnum_t gslotnum) {
@@ -106,17 +85,60 @@ static void remove_group(slotnum_t *ptr, slotnum_t gslotnum) {
 	*ptr = SLOT_CHECK(FILE_SLOT(gr_slot, gslotnum).next_slot);
 }
 
-static void group_dispose(slotnum_t gslotnum) {
-    speedy_group_invalidate(gslotnum);
-    remove_group(&(FILE_HEAD.group_head), gslotnum);
-    speedy_slot_free(gslotnum);
-}
-
 /* Cleanup this group after an fe/be has been removed */
 void speedy_group_cleanup(slotnum_t gslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
 
     /* No cleanup if there are still be's or fe's */
-    if (!gslot->be_head && !gslot->fe_wait)
-	group_dispose(gslotnum);
+    if (!gslot->be_head && !gslot->fe_wait) {
+	speedy_group_invalidate(gslotnum);
+	remove_group(&(FILE_HEAD.group_head), gslotnum);
+	speedy_slot_free(gslotnum);
+    }
+}
+
+slotnum_t speedy_group_create() {
+    slotnum_t gslotnum;
+    gr_slot_t *gslot;
+
+    gslotnum = speedy_slot_alloc();
+    gslot = &FILE_SLOT(gr_slot, gslotnum);
+    gslot->be_head = gslot->be_wait = gslot->fe_wait =
+	gslot->fe_tail = gslot->script_head = 0;
+    gslot->next_slot = FILE_HEAD.group_head;
+    FILE_HEAD.group_head = SLOT_CHECK(gslotnum);
+
+    if (DOING_SINGLE_SCRIPT) {
+	gslot->name = 0;
+    } else {
+	slotnum_t nslotnum;
+
+	gslot->name = nslotnum = speedy_slot_alloc();
+	strncpy(FILE_SLOT(grnm_slot, nslotnum).name, OPTVAL_GROUP, GR_NAMELEN);
+    }
+    return gslotnum;
+}
+
+slotnum_t speedy_group_findname() {
+    slotnum_t gslotnum;
+    gr_slot_t *gslot;
+
+    if (DOING_SINGLE_SCRIPT)
+	return 0;
+
+    /* Need to find our group by name... */
+    for (gslotnum = FILE_HEAD.group_head; gslotnum; gslotnum = gslot->next_slot)
+    {
+	slotnum_t nslotnum;
+
+	gslot = &FILE_SLOT(gr_slot, gslotnum);
+
+	if ((nslotnum = gslot->name) && speedy_group_isvalid(gslotnum) &&
+	    strncmp(FILE_SLOT(grnm_slot, nslotnum).name,
+		OPTVAL_GROUP, GR_NAMELEN) == 0)
+	{
+	    break;
+	}
+    }
+    return gslotnum;
 }

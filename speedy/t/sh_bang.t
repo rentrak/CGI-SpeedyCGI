@@ -12,7 +12,7 @@ my $tmp = "/tmp/sh_bang.$$";
 print "1..2\n";
 
 open(F, ">$tmp") || die;
-print F "#!$ENV{SPEEDY} -- -t5 -r2\nprint ++\$x;\n";
+print F "#!$ENV{SPEEDY} -w -- -t5 -r2\nprint ++\$x; \$x = \$x;\n";
 close(F);
 sleep 1;
 chmod 0755, $tmp;
@@ -48,3 +48,4 @@ sub onerun {
 
 &onerun;
 print &onerun ? "ok\n" : "failed\n";
+alarm(0);

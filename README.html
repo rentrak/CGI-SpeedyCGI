@@ -25,6 +25,8 @@
 	<LI><A HREF="#INSTALLATION">INSTALLATION</A>
 	<UL>
 
+		<LI><A HREF="#Binary_Installation">Binary Installation</A>
+		<LI><A HREF="#Source_Code_Installation">Source Code Installation</A>
 		<LI><A HREF="#Standard_Install">Standard Install</A>
 		<LI><A HREF="#Install_in_a_Different_Directory">Install in a Different Directory</A>
 		<LI><A HREF="#Apache_Installation">Apache Installation</A>
@@ -43,6 +45,7 @@
 
 	<LI><A HREF="#AUTHOR">AUTHOR</A>
 	<LI><A HREF="#SEE_ALSO">SEE ALSO</A>
+	<LI><A HREF="#TRANSLATIONS">TRANSLATIONS</A>
 	<LI><A HREF="#COPYRIGHT">COPYRIGHT</A>
 </UL>
 <!-- INDEX END -->
@@ -78,8 +81,12 @@ CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
  print &quot;Running under speedy=&quot;, $sp-&gt;i_am_speedy ? 'yes' : 'no', &quot;\n&quot;;
 </PRE>
 <P>
-<PRE> # Set up a shutdown handler
+<PRE> # Register a shutdown handler
  $sp-&gt;set_shutdown_handler(sub { do something here });
+</PRE>
+<P>
+<PRE> # Register a cleanup handler
+ $sp-&gt;register_cleanup(sub { do something here });
 </PRE>
 <P>
 <PRE> # Set/get some SpeedyCGI options
@@ -91,9 +98,8 @@ CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 <H1><A NAME="DESCRIPTION">DESCRIPTION</A></H1>
 <P>
 SpeedyCGI is a way to run CGI perl scripts persistently, which usually
-makes them run much more quickly. Converting scripts to use SpeedyCGI is in
-many cases as simple has changing the interpreter line at the top of the
-script from
+makes them run much more quickly. A script can be converted to SpeedyCGI by
+changing the interpreter line at the top of the script from:
 
 <P>
 <PRE>    #!/usr/bin/perl
@@ -106,22 +112,28 @@ to
 </PRE>
 <P>
 After the script is initially run, instead of exiting, SpeedyCGI keeps the
-perl interpreter running in memory. During subsequent runs, this
-interpreter is used to handle new requests, instead of starting a new perl
-interpreter for each execution.
+perl interpreter running. During subsequent runs, this interpreter is used
+to handle new requests instead of starting a new perl interpreter for each
+execution.
 
 <P>
-SpeedyCGI conforms to the CGI specification, and does not work inside the
-web server. A very fast cgi-bin, written in C, is executed for each
-request. This fast cgi-bin then contacts the persistent Perl process, which
-is usually already in memory, to do the work and return the results.
+SpeedyCGI conforms to the CGI specification, and normally does not work
+inside the web server. A very fast cgi-bin, written in C, is executed for
+each request. This fast cgi-bin then contacts the persistent Perl process,
+which is usually already running, to do the work and return the results.
 
 <P>
-Since all of these processes run outside the web server, they can't cause
-problems for the web server itself. Also, each perl program runs as its own
-Unix process, so one program can't interfere with another. Command line
+Since the perl interpreter runs outside the web server, it can't cause
+problems for the web server itself. By default each perl script runs in its
+own Unix process, so one program can't interfere with another. Command line
 options can also be used to deal with programs that have memory leaks or
 other problems that might keep them from otherwise running persistently.
+
+<P>
+SpeedyCGI also provides an Apache module so that under the Apache web
+server, scripts can be run without the overhead of doing a fork/exec for
+each request. With this module a small amount of frontend code is run
+within the web server - the perl interpreters still run outside the server.
 
 <P>
 <HR>
@@ -209,8 +221,8 @@ methods.
 <DL>
 <DT><STRONG><A NAME="item_BackendProg">BackendProg</A></STRONG><DD>
 <P>
-<PRE>    Command Line    : -pstr
-    Default Value   : /usr/bin/speedy_backend
+<PRE>    Command Line    : -p&lt;string&gt;
+    Default Value   : &quot;/usr/bin/speedy_backend&quot;
     Context         : mod_speedycgi, speedy
 </PRE>
 <P>
@@ -221,7 +233,7 @@ methods.
 </PRE>
 <DT><STRONG><A NAME="item_BufsizGet">BufsizGet</A></STRONG><DD>
 <P>
-<PRE>    Command Line    : -BN
+<PRE>    Command Line    : -B&lt;number&gt;
     Default Value   : 8192
     Context         : speedy
 </PRE>
@@ -229,12 +241,12 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use this many bytes for the buffer that
+<PRE>        Use &lt;number&gt; bytes for the buffer that
         receives data from the CGI script.
 </PRE>
 <DT><STRONG><A NAME="item_BufsizPost">BufsizPost</A></STRONG><DD>
 <P>
-<PRE>    Command Line    : -bN
+<PRE>    Command Line    : -b&lt;number&gt;
     Default Value   : 1024
     Context         : speedy
 </PRE>
@@ -242,12 +254,38 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use this many bytes for the buffer that sends
+<PRE>        Use &lt;number&gt; bytes for the buffer that sends
         data to the CGI script.
+</PRE>
+<DT><STRONG><A NAME="item_Group">Group</A></STRONG><DD>
+<P>
+<PRE>    Command Line    : -g&lt;string&gt;
+    Default Value   : &quot;none&quot;
+    Context         : mod_speedycgi, speedy
+</PRE>
+<P>
+<PRE>    Description:
+</PRE>
+<P>
+<PRE>        Allow a single perl interpreter to run
+        multiple scripts. All scripts that are run
+        with the same group name and by the same user
+        will be run by the same group of perl
+        interpreters. If the group name is &quot;none&quot;
+        then grouping is disabled and each
+        interpreter will run one script. Different
+        group names allow scripts to be separated
+        into different groups. Name is
+        case-sensitive, and only the first
+        12-characters are significant. Specifying an
+        empty group name is the same as specifying
+        the group name &quot;default&quot; - this allows just
+        specifying &quot;-g&quot; on the command line to turn
+        on grouping.
 </PRE>
 <DT><STRONG><A NAME="item_MaxBackends">MaxBackends</A></STRONG><DD>
 <P>
-<PRE>    Command Line    : -MN
+<PRE>    Command Line    : -M&lt;number&gt;
     Default Value   : 0 (no max)
     Context         : mod_speedycgi, speedy
 </PRE>
@@ -256,12 +294,12 @@ methods.
 </PRE>
 <P>
 <PRE>        If non-zero, limits the number of speedy
-        backends running for this cgi script to this
-        value.
+        backends running for this cgi script to
+        &lt;number&gt;.
 </PRE>
 <DT><STRONG><A NAME="item_MaxRuns">MaxRuns</A></STRONG><DD>
 <P>
-<PRE>    Command Line    : -rN
+<PRE>    Command Line    : -r&lt;number&gt;
     Default Value   : 500
     Context         : mod_speedycgi, module, speedy
 </PRE>
@@ -269,7 +307,7 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Once the perl interpreter has run this many
+<PRE>        Once the perl interpreter has run &lt;number&gt;
         times, re-exec the backend process.  Zero
         indicates no maximum.  This option is useful
         for processes that tend to consume resources
@@ -278,7 +316,7 @@ methods.
 <DT><STRONG><A NAME="item_PerlArgs">PerlArgs</A></STRONG><DD>
 <P>
 <PRE>    Command Line    : N/A
-    Default Value   : 
+    Default Value   : &quot;&quot;
     Context         : mod_speedycgi
 </PRE>
 <P>
@@ -290,7 +328,7 @@ methods.
 </PRE>
 <DT><STRONG><A NAME="item_Timeout">Timeout</A></STRONG><DD>
 <P>
-<PRE>    Command Line    : -tN
+<PRE>    Command Line    : -t&lt;number&gt;
     Default Value   : 3600 (one hour)
     Context         : mod_speedycgi, module, speedy
 </PRE>
@@ -299,13 +337,13 @@ methods.
 </PRE>
 <P>
 <PRE>        If no new requests have been received after
-        this many seconds, exit the persistent perl
+        &lt;number&gt; seconds, exit the persistent perl
         interpreter.  Zero indicates no timeout.
 </PRE>
 <DT><STRONG><A NAME="item_TmpBase">TmpBase</A></STRONG><DD>
 <P>
-<PRE>    Command Line    : -Tstr
-    Default Value   : /tmp/speedy
+<PRE>    Command Line    : -T&lt;string&gt;
+    Default Value   : &quot;/tmp/speedy&quot;
     Context         : mod_speedycgi, speedy
 </PRE>
 <P>
@@ -342,11 +380,22 @@ Create a new CGI::SpeedyCGI object.
 <P>
 <PRE>    my $sp = CGI::SpeedyCGI-&gt;new;
 </PRE>
+<DT><STRONG><A NAME="item_register_cleanup">register_cleanup($function_ref)</A></STRONG><DD>
+<P>
+Register a function that will be called at the end of each request, after
+your script finishes running, but before STDOUT and STDERR are closed.
+Multiple functions can be added by calling the method more than once. At
+the end of the request, each function will be called in the order in which
+it was registered.
+
+<P>
+<PRE>    $sp-&gt;register_cleanup(\&amp;cleanup_func);
+</PRE>
 <DT><STRONG><A NAME="item_set_shutdown_handler">set_shutdown_handler($function_ref)</A></STRONG><DD>
 <P>
 Register a function that will be called right before the perl interpreter
 exits. This is <STRONG>not</STRONG> at the end of each request, it is when the perl interpreter decides to exit
-completely (due to a timeout, maxruns, etc)
+completely due to a Timeout or reaching MaxRuns.
 
 <P>
 <PRE>    $sp-&gt;set_shutdown_handler(sub {$dbh-&gt;logout});
@@ -359,6 +408,15 @@ method allows the script to tell which environment it is in.
 
 <P>
 <PRE>    $sp-&gt;i_am_speedy;
+</PRE>
+<P>
+To make your script as portable as possible, you can use the following test
+to make sure both the SpeedyCGI module is available and you are running
+under SpeedyCGI:
+
+<P>
+<PRE>    if (eval {require CGI::SpeedyCGI} &amp;&amp; CGI::SpeedyCGI-&gt;i_am_speedy) {
+        Do something SpeedyCGI specific here...
 </PRE>
 <DT><STRONG><A NAME="item_setopt">setopt($optname, $value)</A></STRONG><DD>
 <P>
@@ -381,15 +439,53 @@ Return the current value of one of the SpeedyCGI options.
 <HR>
 <H1><A NAME="INSTALLATION">INSTALLATION</A></H1>
 <P>
-SpeedyCGI has been tried with perl version 5.004_04 under Solaris 2.6 and
-version 5.005_03, under Redhat Linux 6.1. There may be problems with other
-OSes or earlier versions of Perl.
+To install SpeedyCGI you will need to either download a binary package for
+your OS, or compile SpeedyCGI from source code. See <A HREF="#DOWNLOADING">DOWNLOADING</A>
+for information on where to obtain the source code and binaries.
+
+<P>
+<HR>
+<H2><A NAME="Binary_Installation">Binary Installation</A></H2>
+<P>
+Once you have downloaded the binary package for your OS, you'll need to
+install it using the normal package tools for your OS. The commands to do
+that are:
+
+<DL>
+<DT><STRONG><A NAME="item_Linux">Linux</A></STRONG><DD>
+<P>
+<PRE> rpm -i &lt;filename&gt;
+</PRE>
+<DT><STRONG><A NAME="item_Solaris">Solaris</A></STRONG><DD>
+<P>
+<PRE> gunzip &lt;filename&gt;.gz
+ pkgadd -d &lt;filename&gt;
+</PRE>
+<DT><STRONG><A NAME="item_BSD">BSD</A></STRONG><DD>
+<P>
+<PRE> pkg_add &lt;filename&gt;
+</PRE>
+</DL>
+<P>
+If you are also installing the apache module you will have to configure
+Apache as documented in <A HREF="#Apache_Configuration">Apache Configuration</A>.
+
+<P>
+<HR>
+<H2><A NAME="Source_Code_Installation">Source Code Installation</A></H2>
+<P>
+To compile SpeedyCGI you will need perl 5.004 or later, and a C compiler,
+preferably the same one that your perl distribution was compiled with.
+SpeedyCGI is known to work under Solaris, Redhat Linux, FreeBSD and
+OpenBSD. There may be problems with other OSes or other versions of Perl.
+SpeedyCGI may not work with threaded perl -- as of release 2.10, Linux and
+Solaris seem to work OK with threaded perl, but FreeBSD does not.
 
 <P>
 <HR>
 <H2><A NAME="Standard_Install">Standard Install</A></H2>
 <P>
-To install, do the following:
+To do a standard install from source code, execute the following:
 
 <P>
 <PRE>    perl Makefile.PL
@@ -420,7 +516,7 @@ This will install the binaries in <EM>/somewhere/bin</EM> and the SpeedyCGI.pm m
 <HR>
 <H2><A NAME="Apache_Installation">Apache Installation</A></H2>
 <P>
-To use the optional apache mod_speedycgi module you must have the <STRONG>apxs</STRONG>
+To compile the optional apache mod_speedycgi module you must have the <STRONG>apxs</STRONG>
 command in your path. Redhat includes this command with the
 ``apache-devel'' RPM, though it may not work properly for installation.
 
@@ -506,8 +602,9 @@ group ``rfe'' for the todo list.
 <DL>
 <DT><STRONG><A NAME="item_How">How does the speedy front end connect to the back end process?</A></STRONG><DD>
 <P>
-Via a Unix socket in <EM>/tmp</EM>. A queue is kept in <EM>/tmp</EM> that holds an entry for each process. In that queue are the pids of the
-perl processes waiting for connections. The CGI-front end pulls a process
+Via a Unix socket in <EM>/tmp</EM>. A queue is kept in a shared file in <EM>/tmp</EM>
+that holds an entry for each process. In that queue are the pids of the
+perl processes waiting for connections. The CGI frontend pulls a process
 out of this queue, connects to its socket, sends over the environment and
 argv, and then uses this socket for stdin/stdout to the perl process.
 
@@ -567,7 +664,8 @@ they're undefined.
 <P>
 Also, if you create global variables with ``my'', you shouldn't try to
 reference those variables from within a subroutine - you should pass them
-into the subroutine instead.
+into the subroutine instead. Or better yet just declare global variables
+with ``use vars'' instead of ``my'' to avoid the problem altogether.
 
 <P>
 Here's a good explanation of the problem - it's for mod_perl, but the same
@@ -581,6 +679,42 @@ If all else fails you can disable persistence by setting MaxRuns to 1. The
 only benefit of this over normal perl is that speedy will pre-compile your
 script between requests.
 
+</DL>
+<DL>
+<DT><STRONG>How do I keep a persistent connect to a database?</STRONG><DD>
+<P>
+Since globals retain their values between runs, the best way to do this is
+to store the connection in a global variable, then check on each run to see
+if that variable is already defined.
+
+<P>
+For example, if your code has an ``open_db_connection'' subroutine that
+returns a database connection handle, you can use the code below to keep a
+persistent connection:
+
+<P>
+<PRE>    use vars qw($dbh);
+    unless (defined($dbh)) {
+        $dbh = &amp;open_db_connection;
+    }
+</PRE>
+<P>
+This code will store a persistent database connection handle in the global
+variable ``$dbh'' and only initialize it the first time the code is run.
+During subsequent runs, the existing connection is re-used.
+
+<P>
+You may also want to check the connection each time before using it, in
+case it is not working for some reason. So, assuming you have a subroutine
+named ``db_connection_ok'' that returns true if the db connection is
+working, you can use code like this:
+
+<P>
+<PRE>    use vars qw($dbh);
+    unless (defined($dbh) &amp;&amp; &amp;db_connection_ok($dbh)) {
+        $dbh = &amp;open_db_connection;
+    }
+</PRE>
 </DL>
 <P>
 <HR>
@@ -606,13 +740,13 @@ HREF="http://daemoninc.com/SpeedyCGI/mailArchive/">http://daemoninc.com/SpeedyCG
 <HR>
 <H2><A NAME="Binaries">Binaries</A></H2>
 <P>
-Redhat RPMs can be found at:
+Binaries for many OSes can be found at:
 
 <P>
-<PRE>    <A HREF="http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/rpm">http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/rpm</A>
+<PRE>    <A HREF="http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries">http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries</A>
 </PRE>
 <P>
-Debian packages can be found at:
+There are also some older debian packages available from:
 
 <P>
 <PRE>    <A HREF="http://www.debian.org/Packages/stable/interpreters/speedy-cgi-perl.html">http://www.debian.org/Packages/stable/interpreters/speedy-cgi-perl.html</A>
@@ -660,9 +794,20 @@ Press Enter when prompted for a password.
 
 <P>
 <HR>
+<H1><A NAME="TRANSLATIONS">TRANSLATIONS</A></H1>
+<DL>
+<DT><STRONG><A NAME="item_Japanese">Japanese</A></STRONG><DD>
+<P>
+<A
+HREF="http://member.nifty.ne.jp/hippo2000/perltips/CGI/SpeedyCGI.htm">http://member.nifty.ne.jp/hippo2000/perltips/CGI/SpeedyCGI.htm</A>
+
+
+</DL>
+<P>
+<HR>
 <H1><A NAME="COPYRIGHT">COPYRIGHT</A></H1>
 <P>
-Copyright (C) 2000 Daemon Consulting Inc.
+Copyright (C) 2001 Daemon Consulting Inc.
 
 <P>
 This program is free software; you can redistribute it and/or modify it

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -49,8 +49,8 @@ typedef struct _PollInfo {
 #define SPEEDY_POLLOUT	2
 
 typedef struct _PollInfo {
-    int		maxfd;
     fd_set	fdset[2];
+    int		maxfd;
 } PollInfo;
 
 #endif
@@ -65,3 +65,4 @@ void speedy_poll_reset(PollInfo *pi);
 void speedy_poll_set(PollInfo *pi, int fd, int flags);
 int speedy_poll_wait(PollInfo *pi, int msecs);
 int speedy_poll_isset(const PollInfo *pi, int fd, int flag);
+int speedy_poll_quickwait(PollInfo *pi, int fd, int flags, int msecs);

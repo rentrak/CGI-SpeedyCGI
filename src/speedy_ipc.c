@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,10 +18,6 @@
  */
 
 #include "speedy.h"
-
-static int listener;
-static struct stat listener_stbuf;
-static PollInfo listener_pi;
 
 #ifdef ENOBUFS
 #   define NO_BUFSPC(e) ((e) == ENOBUFS || (e) == ENOMEM)
@@ -67,12 +63,15 @@ static int make_sock(int pref_fd) {
     return -1;
 }
 
-static int do_connect(slotnum_t slotnum, int fd) {
-    struct sockaddr_un sa;
-
-    make_sockname(slotnum, &sa, 0);
-    return connect(fd, (struct sockaddr *)&sa, sizeof(sa)) != -1;
+void speedy_ipc_cleanup(slotnum_t slotnum) {
+    speedy_free(get_fname(slotnum, 1));
 }
+
+#ifdef SPEEDY_BACKEND
+
+static int		listener;
+static struct stat	listener_stbuf;
+static PollInfo		listener_pi;
 
 void speedy_ipc_listen(slotnum_t slotnum) {
     struct sockaddr_un sa;
@@ -107,6 +106,12 @@ void speedy_ipc_listen(slotnum_t slotnum) {
     speedy_poll_init(&listener_pi, listener);
 }
 
+static void ipc_unlisten() {
+    close(listener);
+    listener = -1;
+    speedy_poll_free(&listener_pi);
+}
+
 void speedy_ipc_listen_fixfd(slotnum_t slotnum) {
     struct stat stbuf;
 
@@ -127,23 +132,52 @@ void speedy_ipc_listen_fixfd(slotnum_t slotnum) {
     if (status == -1 || test1 || test2)
 #endif
     {
-	close(listener);
+	ipc_unlisten();
 	speedy_ipc_listen(slotnum);
     }
 }
 
-void speedy_ipc_cleanup(slotnum_t slotnum) {
-    speedy_free(get_fname(slotnum, 1));
+static void do_accept(int pref_fd) {
+    struct sockaddr_un sa;
+    int namelen, sock;
+
+    namelen = sizeof(sa);
+    sock = speedy_util_pref_fd(
+	accept(listener, (struct sockaddr*)&sa, &namelen), pref_fd
+    );
+    if (sock == -1)
+	speedy_util_die("accept failed");
 }
 
-void speedy_ipc_unlisten() {
-    (void) close(listener);
-    speedy_poll_free(&listener_pi);
+static int accept_ready(int wakeup) {
+    return speedy_poll_quickwait(&listener_pi, listener, SPEEDY_POLLIN, wakeup)
+	> 0;
+}
+
+int speedy_ipc_accept(int wakeup) {
+    if (accept_ready(wakeup)) {
+	do_accept(PREF_FD_ACCEPT_I);
+	dup2(PREF_FD_ACCEPT_I, PREF_FD_ACCEPT_O);
+	do_accept(PREF_FD_ACCEPT_E);
+	return 1;
+    }
+    return 0;
+}
+
+#endif /* SPEEDY_BACKEND */
+
+#ifdef SPEEDY_FRONTEND
+
+static int do_connect(slotnum_t slotnum, int fd) {
+    struct sockaddr_un sa;
+
+    make_sockname(slotnum, &sa, 0);
+    return connect(fd, (struct sockaddr *)&sa, sizeof(sa)) != -1;
 }
 
 void speedy_ipc_connect_prepare(int *s, int *e) {
-    *s = make_sock(PREF_FD_CONNECT_S);
-    *e = make_sock(PREF_FD_CONNECT_E);
+    *s = make_sock(PREF_FD_DONTCARE);
+    *e = make_sock(PREF_FD_DONTCARE);
 }
 
 int speedy_ipc_connect(slotnum_t slotnum, int s, int e) {
@@ -154,33 +188,4 @@ int speedy_ipc_connect(slotnum_t slotnum, int s, int e) {
     return 0;
 }
 
-static int do_accept(int pref_fd) {
-    struct sockaddr_un sa;
-    int namelen, sock;
-
-    namelen = sizeof(sa);
-    sock = speedy_util_pref_fd(
-	accept(listener, (struct sockaddr*)&sa, &namelen), pref_fd
-    );
-    if (sock == -1) speedy_util_die("accept failed");
-    return sock;
-}
-
-int speedy_ipc_accept_ready(int wakeup) {
-    int retval;
-
-    speedy_poll_reset(&listener_pi);
-    speedy_poll_set(&listener_pi, listener, SPEEDY_POLLIN);
-    retval = speedy_poll_wait(&listener_pi, wakeup) > 0;
-    speedy_util_time_invalidate();
-    return retval;
-}
-
-int speedy_ipc_accept(int wakeup, int *s, int *e) {
-    if (speedy_ipc_accept_ready(wakeup)) {
-	*s = do_accept(PREF_FD_ACCEPT_S);
-	*e = do_accept(PREF_FD_ACCEPT_E);
-	return 1;
-    }
-    return 0;
-}
+#endif /* SPEEDY_FRONTEND */

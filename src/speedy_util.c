@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,61 +20,80 @@
 #include "speedy.h"
 
 static struct timeval saved_time;
+static int my_euid = -1;
 
-int speedy_util_pref_fd(int oldfd, int newfd) {
-    if (oldfd != newfd && oldfd != -1 && newfd != -1) {
-	(void) dup2(oldfd, newfd);
-	(void) close(oldfd);
-	return newfd;
-    } else {
-	return oldfd;
+static int change_fd(int oldfd, int newfd) {
+    (void) dup2(oldfd, newfd);
+    (void) close(oldfd);
+    return newfd;
+}
+
+#ifdef SPEEDY_PROFILING
+static void end_profiling(int dowrites) {
+    char *cwd;
+    
+    if (dowrites)
+	cwd = getcwd(NULL, 0);
+
+    mkdir(SPEEDY_PROFILING, 0777);
+    chdir(SPEEDY_PROFILING);
+
+    if (dowrites) {
+	_mcleanup();
+	__bb_exit_func();
+	chdir(cwd);
+	free(cwd);
     }
 }
+#endif
 
-static int euid = -1;
-
-int speedy_util_geteuid() {
-    if (euid == -1)
-	euid = geteuid();
-    return euid;
+SPEEDY_INLINE int speedy_util_pref_fd(int oldfd, int newfd) {
+    return (newfd == PREF_FD_DONTCARE || oldfd == -1 || newfd == oldfd)
+	? oldfd : change_fd(oldfd, newfd);
 }
 
+SPEEDY_INLINE int speedy_util_geteuid() {
+    if (my_euid == -1)
+	my_euid = geteuid();
+    return my_euid;
+}
+
+#ifdef IAMSUID
 int speedy_util_seteuid(int id) {
     int retval = seteuid(id);
     if (retval != -1)
-	euid = id;
+	my_euid = id;
     return retval;
 }
+#endif
 
-int speedy_util_getuid() {
+SPEEDY_INLINE int speedy_util_getuid() {
     static int uid = -1;
     if (uid == -1)
 	uid = getuid();
     return uid;
 }
 
+#ifdef SPEEDY_BACKEND
 int speedy_util_argc(const char * const * argv) {
     int retval;
     for (retval = 0; *argv++; ++retval) 
 	;
     return retval;
 }
+#endif
 
-int speedy_util_getpid() {
+SPEEDY_INLINE int speedy_util_getpid() {
     static int saved_pid;
     if (!saved_pid) saved_pid = getpid();
     return saved_pid;
-}
-
-int speedy_util_kill(pid_t pid, int sig) {
-    return (pid && pid != speedy_util_getpid()) ? kill(pid, sig) : 0;
 }
 
 static void just_die(const char *fmt, va_list ap) {
     extern int errno;
     char buf[2048];
 
-    sprintf(buf, "%s[%d]: ", SPEEDY_PROGNAME, (int)getpid());
+    sprintf(buf, "%s[%u]: ", SPEEDY_PROGNAME, (int)getpid());
     vsprintf(buf + strlen(buf), fmt, ap);
     if (errno) {
 	strcat(buf, ": ");
@@ -107,6 +126,10 @@ int speedy_util_execvp(const char *filename, const char *const *argv) {
     /* Get original argv */
     environ = (char **)speedy_opt_exec_envp();
 
+#ifdef SPEEDY_PROFILING
+    end_profiling(1);
+#endif
+
     /* Exec the backend */
     return speedy_execvp(filename, argv);
 }
@@ -118,31 +141,133 @@ char *speedy_util_strndup(const char *s, int len) {
     return buf;
 }
 
-void speedy_util_gettimeofday(struct timeval *tv) {
+SPEEDY_INLINE void speedy_util_gettimeofday(struct timeval *tv) {
     if (!saved_time.tv_sec)
 	gettimeofday(&saved_time, NULL);
-    tv->tv_sec = saved_time.tv_sec;
-    tv->tv_usec = saved_time.tv_usec;
+    *tv = saved_time;
 }
 
-time_t speedy_util_time() {
+SPEEDY_INLINE int speedy_util_time() {
     struct timeval tv;
     speedy_util_gettimeofday(&tv);
     return tv.tv_sec;
 }
 
-void speedy_util_time_invalidate() {
+SPEEDY_INLINE void speedy_util_time_invalidate() {
     saved_time.tv_sec = 0;
 }
 
 char *speedy_util_fname(int num, char type) {
     char *fname = (char*) speedy_malloc(strlen(OPTVAL_TMPBASE) + 80);
-    int uid = speedy_util_getuid(), euid = speedy_util_geteuid();
+    int uid = speedy_util_getuid(), my_euid = speedy_util_geteuid();
 
-    if (euid == uid)
-	sprintf(fname, "%s.%x.%x.%c", OPTVAL_TMPBASE, num, euid, type);
+    if (my_euid == uid)
+	sprintf(fname, "%s.%x.%x.%c", OPTVAL_TMPBASE, num, my_euid, type);
     else
-	sprintf(fname, "%s.%x.%x.%x.%c", OPTVAL_TMPBASE, num, euid, uid, type);
+	sprintf(fname, "%s.%x.%x.%x.%c", OPTVAL_TMPBASE, num, my_euid, uid, type);
 
     return fname;
+}
+
+char *speedy_util_getcwd() {
+    char *buf, *cwd_ret;
+    int size = 512, too_small;
+
+    /* TEST - see if memory alloc works */
+    /* size = 10; */
+
+    while (1) {
+	buf = (char*) speedy_malloc(size);
+	cwd_ret = getcwd(buf, size);
+
+	/* TEST - simulate getcwd failure due to unreable directory */
+	/* cwd_ret = NULL; errno = EACCES; */
+
+	if (cwd_ret != NULL)
+	    break;
+
+	/* Must test errno here in case speedy_free overwrites it */
+	too_small = (errno == ERANGE);
+
+	speedy_free(buf);
+
+	if (!too_small)
+	    break;
+
+	size *= 2;
+    }
+    return cwd_ret;
+}
+
+void speedy_util_mapout(SpeedyMapInfo *mi) {
+    if (mi->addr) {
+	if (mi->is_mmaped)
+	    (void) munmap(mi->addr, mi->maplen);
+	else
+	    speedy_free(mi->addr);
+	mi->addr = NULL;
+    }
+    speedy_free(mi);
+}
+
+static int readall(int fd, void *addr, int len) {
+    int numread, n;
+
+    for (numread = 0; len - numread; numread += n) {
+	n = read(fd, ((char*)addr) + numread, len - numread);
+	if (n == -1)
+	    return -1;
+	if (n == 0)
+	    break;
+    }
+    return numread;
+}
+
+SpeedyMapInfo *speedy_util_mapin(int fd, int max_size, int file_size)
+{
+    SpeedyMapInfo *mi = speedy_malloc(sizeof(SpeedyMapInfo));
+
+    mi->maplen = max_size == -1 ? file_size : min(file_size, max_size);
+    mi->addr = mmap(0, mi->maplen, PROT_READ, MAP_SHARED, fd, 0);
+    mi->is_mmaped = (mi->addr != (void*)MAP_FAILED);
+
+    if (!mi->is_mmaped) {
+	mi->addr = speedy_malloc(mi->maplen);
+	lseek(fd, 0, SEEK_SET);
+	mi->maplen = readall(fd, mi->addr, mi->maplen);
+	if (mi->maplen == -1) {
+	    speedy_util_mapout(mi);
+	    return NULL;
+	}
+    }
+    return mi;
+}
+
+SPEEDY_INLINE SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf) {
+    SpeedyDevIno retval;
+    retval.d = stbuf->st_dev;
+    retval.i = stbuf->st_ino;
+    return retval;
+}
+
+SPEEDY_INLINE int speedy_util_open_stat(const char *path, struct stat *stbuf)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd != -1 && fstat(fd, stbuf) == -1) {
+       close(fd);
+       fd = -1;
+    }
+    return fd;
+}
+
+void speedy_util_exit(int status, int underbar_exit) {
+
+#ifdef SPEEDY_PROFILING
+    end_profiling(underbar_exit);
+#endif
+
+    if (underbar_exit)
+	_exit(status);
+    else
+	exit(status);
 }

@@ -3,11 +3,17 @@
 
 print "1..1\n";
 
-open (RUN1, "$ENV{SPEEDY} -- -M2 t/scripts/maxbackend < /dev/null |");
-sleep(1);
-open (RUN2, "$ENV{SPEEDY} -- -M2 t/scripts/maxbackend < /dev/null |");
-sleep(1);
-open (RUN3, "$ENV{SPEEDY} -- -M2 t/scripts/maxbackend < /dev/null |");
+my $scr = 't/scripts/maxbackend';
+utime time, time, $scr;
+sleep 1;
+
+my $cmd = "$ENV{SPEEDY} -- -M2 $scr </dev/null |";
+
+open (RUN1, $cmd);
+sleep 1;
+open (RUN2, $cmd);
+sleep 1;
+open (RUN3, $cmd);
 
 $pid1 = <RUN1>; chop $pid1;
 $pid2 = <RUN2>; chop $pid2;

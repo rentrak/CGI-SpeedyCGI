@@ -16,14 +16,14 @@ for (my $j = 0; $j < 2; ++$j) {
     # Do both stdout and stderr
     foreach my $redirect (@redirects) {
 	open(F, "| $ENV{SPEEDY} -- -r2 t/scripts/stdio2 $redirect");
-	for (my $i = 0; $i < $num; ++$i) {
+	for (my $i = 1; $i < $num; ++$i) {
 	    print F "$i\n";
 	}
 	close(F);
 
 	my $ok = 1;
 	open(F, "<$tmp");
-	for (my $i = 0; $i < $num; ++$i) {
+	for (my $i = 1; $i < $num; ++$i) {
 	    $_ = <F>;
 	    ## print STDERR "got $_\n";
 	    if ($_ != $i) {

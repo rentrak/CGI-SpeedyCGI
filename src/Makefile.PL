@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -17,7 +17,12 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #
 
-use SpeedyMake qw(@src_generated);
+BEGIN {
+    require '../src/SpeedyMake.pl';
+    import SpeedyMake qw(@src_generated);
+}
+
+use Config qw(%Config);
 
 my $gen = join(' ', @src_generated);
 
@@ -28,8 +33,8 @@ print M <<END;
 
 all: ${gen}
 
-${gen}: optdefs optdefs.pl SpeedyCGI_src.pm
-	perl -w optdefs.pl \$(SPEEDY_INSTALL_BIN)
+${gen}: optdefs optdefs.pl SpeedyCGI.src
+	$Config{perlpath} -w optdefs.pl \$(SPEEDY_INSTALL_BIN)
 
 clean:
 	rm -f ${gen} Makefile

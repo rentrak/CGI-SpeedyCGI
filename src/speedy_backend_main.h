@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,13 +25,5 @@
 #define speedy_free(s)		Safefree(s)
 #define speedy_execvp(f,a)	execvp(f,(char * const*)a)
 
-void *speedy_malloc(int n);
-void *speedy_realloc(void *ptr, size_t size);
-
-/* Our preferred file descriptors */
-
-#define PREF_FD_ACCEPT_S	0
-#define PREF_FD_ACCEPT_E	2
-#define PREF_FD_FILE		17
-#define PREF_FD_LISTENER	18
-#define PREF_FD_CWD		19
+SPEEDY_INLINE void *speedy_malloc(size_t size);
+SPEEDY_INLINE void *speedy_realloc(void *ptr, size_t size);

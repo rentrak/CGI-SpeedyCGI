@@ -3,7 +3,7 @@
 # Object used in the various Makefile.PL's
 #
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -32,13 +32,43 @@ use ExtUtils::MakeMaker;
 use ExtUtils::Embed;
 use vars qw(@src_generated %write_makefile_common);
 
-@src_generated = qw(
-    speedy_optdefs.h speedy_optdefs.c mod_speedycgi_cmds.c SpeedyCGI.pm
-);
+# Turn these off in the distribution
+my $COVERAGE	= 0;	# Compile for coverage testing
+my $PROFILING	= 0;	# Compile for profiling
+my $DEVEL	= 0;	# Compile for gdb
+
+# Options to produce warnings
+my $WARNOPTS	= ' -pedantic -Wall ';
+
+my $pwd = &pwd;
+use vars qw($OPTIMIZE $LD_OPTS);
+
+if ($COVERAGE) {
+    $LD_OPTS	= ' -fprofile-arcs -ftest-coverage -O ';
+    $OPTIMIZE	= $WARNOPTS .  $LD_OPTS .
+		  '-DSPEEDY_PROFILING=\\\\\"`pwd`\\\\\"';
+}
+elsif ($PROFILING) {
+    $LD_OPTS	= ' -pg -O ';
+    $OPTIMIZE	= $WARNOPTS . $LD_OPTS .
+		  '-DSPEEDY_PROFILING=\\\\\"`pwd`\\\\\"';
+}
+elsif ($DEVEL) {
+    $OPTIMIZE	= $WARNOPTS . '-g -O';
+}
+else {
+    # Force -O here, because otherwise on Sun they use odd OPTIMIZE flags
+    # that make gcc fail.
+    $OPTIMIZE	= '-O';
+}
 
 %write_makefile_common = (
-    #OPTIMIZE	=> '-g -pedantic -Wall',
-    LINKTYPE	=> ' ',
+    'OPTIMIZE'	=> $OPTIMIZE,
+    'LINKTYPE'	=> ' ',
+);
+
+@src_generated = qw(
+    speedy_optdefs.h speedy_optdefs.c mod_speedycgi_cmds.c SpeedyCGI.pm
 );
 
 sub init { my $class = shift;
@@ -48,12 +78,11 @@ sub init { my $class = shift;
     return $class;
 }
 
+sub am_frontend {1}
+
 sub pwd {
-    use vars qw($pwd);
-    if (!defined($pwd)) {
-	$pwd = `pwd`;
-	chop $pwd;
-    }
+    my $pwd = `pwd`;
+    chop $pwd;
     return $pwd;
 }
 
@@ -87,17 +116,17 @@ sub src_files { my $class = shift;
     (
 	$class->src_files_extra,
 	qw(
+	    util
+	    frontend
 	    backend
 	    file
-	    frontend
-	    group
-	    ipc
-	    optdefs
-	    opt
-	    poll
-	    script
 	    slot
-	    util
+	    poll
+	    ipc
+	    group
+	    script
+	    opt
+	    optdefs
 	),
     );
 }
@@ -154,7 +183,7 @@ sub speedy_h_cmds { my $class = shift;
     my($pre, $inc, $main) = (
 	$class->prefix, $class->inc, $class->main_h
     );
-    my @files = ("${pre}inc_${inc}", $main, "${pre}inc");
+    my @files = ("${pre}inc_${inc}", "${pre}inc", $main);
     my $echo_cmds = join('; ', map {"echo '#include \"$_.h\"'"} @files);
     return join("\n",
 	'',
@@ -168,12 +197,20 @@ sub optdefs_cmds { my($class, $dir) = @_;
     $dir ||= '../src';
     my $gen = join(' ', map {"$dir/$_"} @src_generated);
     "
-${gen}: $dir/Makefile $dir/SpeedyCGI_src.pm
-	cd $dir; \$(MAKE) SPEEDY_INSTALL_BIN=\$(INSTALLBIN)
+${gen}: $dir/Makefile $dir/SpeedyCGI.src $dir/optdefs
+	(cd $dir; \$(MAKE) SPEEDY_INSTALL_BIN=\$(INSTALLBIN))
 
 $dir/Makefile: $dir/Makefile.PL
-	cd ${dir}; \$(PERL) Makefile.PL
+	(cd ${dir}; \$(PERL) Makefile.PL)
     ";
+}
+
+sub extra_defines { my $class = shift;
+    join(' ',
+	"-DSPEEDY_PROGNAME=\\\"" . $class->my_name_full . "\\\"",
+	"-DSPEEDY_VERSION=\\\"\$(VERSION)\\\"",
+	'-DSPEEDY_' . ($class->am_frontend ? 'FRONTEND' : 'BACKEND')
+    );
 }
 
 sub write_makefile { my $class = shift;
@@ -182,9 +219,9 @@ sub write_makefile { my $class = shift;
 	MAP_TARGET	=> $class->my_name_full,
 	OBJECT		=> join(' ', $class->src_files_o),
 	INC		=> '-I../src -I.',
-	VERSION_FROM	=> '../src/SpeedyCGI_src.pm',
-	DEFINE		=> "-DSPEEDY_PROGNAME=\\\"" . $class->my_name_full . "\\\" -DSPEEDY_VERSION=\\\"\$(VERSION)\\\"",
+	VERSION_FROM	=> '../src/SpeedyCGI.src',
 	PM		=> {},
+	DEFINE		=> $class->extra_defines,
 	%write_makefile_common
     );
 }
@@ -205,6 +242,11 @@ sub clean_files_c { my $class = shift;
 sub clean_files { my $class = shift;
     (
 	$class->clean_files_c,
+	$class->add_suffix('.bb',	$class->clean_files_full),
+	$class->add_suffix('.da',	$class->clean_files_full),
+	$class->add_suffix('.bbg',	$class->clean_files_full),
+	'*.gcov',
+	'gmon.out',
 	$class->clean_files_extra
     );
 }
@@ -245,19 +287,31 @@ clean ::
     ";
 }
 
-sub get_ldopts {&ExtUtils::Embed::ldopts('-std');}
+sub check_syms_def { 
+    $DEVEL ? '../util/check_syms' : 'true';
+}
+
+sub remove_libs { undef }
+
+sub get_ldopts {
+    "$LD_OPTS " . &ExtUtils::Embed::ldopts('-std');
+}
 sub get_ccopts {&ExtUtils::Embed::ccopts();}
 
 sub makeaperl { my $class = shift;
     my $my_name = $class->my_name_full;
     my $ldopts = $class->get_ldopts;
+    my $check_syms = $class->check_syms_def;
+    my $remove_libs = $class->remove_libs;
 
     "
 all :: $my_name
 
 ${my_name}: \$(OBJECT)
-	rm -f ${my_name}; \$(LD) -o ${my_name} \$(OBJECT) $ldopts && ../util/check_syms && echo ''
+	rm -f ${my_name}; $remove_libs \$(LD) -o ${my_name} \$(OBJECT) $ldopts && $check_syms && echo ''
     ";
 }
+
+sub devel {$DEVEL}
 
 1;

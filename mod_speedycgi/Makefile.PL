@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -20,12 +20,13 @@
 
 package SpeedyMake::mod_speedycgi;
 
-require '../src/SpeedyMake.pm';
+require '../src/SpeedyMake.pl';
 @ISA = 'SpeedyMake';
 
 sub inc {'apache'}
-sub clean_files_extra { 'mod_speedycgi_cmds.c' }
+sub clean_files_full_extra { 'mod_speedycgi_cmds' }
 sub main_file_full {'mod_speedycgi'}
+sub my_name_full {shift->main_file_full}
 
 package mod_speedycgi;
 
@@ -50,6 +51,8 @@ foreach my $x (
     [qw(SRC_CFILES src_files_c)],
     [qw(OFILES src_files_o)],
     [qw(C_FILE_CLEAN clean_files_c)],
+    [qw(CHECK_SYMS check_syms_def)],
+    [qw(DEF extra_defines)],
 )
 {
     my($def, $method) = @$x;

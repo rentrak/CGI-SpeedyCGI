@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -20,15 +20,33 @@
 
 package SpeedyMake::speedy_backend;
 
-require '../src/SpeedyMake.pm';
+require '../src/SpeedyMake.pl';
 @ISA = 'SpeedyMake';
 
 sub src_files_extra {'perl'}
 sub src_files_o_extra {'xsinit.o'}
-sub clean_files_extra {'xsinit.c'}
+sub clean_files_full_extra {'xsinit'}
+sub am_frontend {0}
 
 use ExtUtils::Embed;
 
-xsinit('xsinit.c');
+my $tmp = "xsinit.tmp$$";
+
+xsinit($tmp, 1, ['SpeedyCGI']);
+
+open(I, $tmp)		|| die "${tmp}: $!\n";
+open(O, '>xsinit.c')	|| die "xsinit.c: $!\n";
+while (<I>) {
+    if (/SpeedyCGI/) {
+	if (/newXS.*SpeedyCGI/) {
+	    print O "\t{extern void speedy_xs_init(); speedy_xs_init();}\n";
+	}
+    } else {
+	print O $_;
+    }
+}
+close(I) || die;
+close(O) || die;
+unlink $tmp;
 
 SpeedyMake::speedy_backend->init->write_makefile;

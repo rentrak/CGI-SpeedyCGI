@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,6 +19,7 @@
 
 #include <EXTERN.h>
 #include <perl.h>
+#include <XSUB.h>
 
 /* For sockets */
 #ifndef VMS
@@ -76,3 +77,6 @@
 
 /* For mmap */
 #include <sys/mman.h>
+
+/* For kill, sig* functions */
+#include <signal.h>

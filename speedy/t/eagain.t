@@ -25,7 +25,7 @@ sub do_test { my($do_stdin) = @_;
     } else {
 	open(F, ">$tmp");
     }
-    for (my $i = 0; $i < $num; ++$i) {
+    for (my $i = 1; $i < $num; ++$i) {
 	print F "$i\n";
 	# Sleep in the middle of sending data.  Should cause an error if
 	# the bug is present.
@@ -40,9 +40,9 @@ sub do_test { my($do_stdin) = @_;
     } else {
 	open(F, "$ENV{SPEEDY} t/scripts/stdio 0 <$tmp |");
     }
-    for (my $i = 0; $i < $num; ++$i) {
+    for (my $i = 1; $i < $num; ++$i) {
 	$_ = <F>;
-	# print STDERR "got $_\n";
+	#print STDERR "Got $_";
 
 	# Sleep halfway through, and if bug is present we should get an error
 	# because the buffer is flushed instead of being retried.

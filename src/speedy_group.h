@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,7 +18,17 @@
  */
 
 void speedy_group_invalidate(slotnum_t gslotnum);
-int speedy_group_isvalid(slotnum_t gslotnum);
-void speedy_group_setname(slotnum_t gslotnum, const char *name);
 void speedy_group_sendsigs(slotnum_t gslotnum);
 void speedy_group_cleanup(slotnum_t gslotnum);
+slotnum_t speedy_group_create();
+slotnum_t speedy_group_findname();
+
+#define DOING_SINGLE_SCRIPT \
+    OPTVAL_GROUP[0] == 'n' && \
+    OPTVAL_GROUP[1] == 'o' && \
+    OPTVAL_GROUP[2] == 'n' && \
+    OPTVAL_GROUP[3] == 'e' && \
+    OPTVAL_GROUP[4] == '\0'
+
+#define speedy_group_isvalid(gslotnum) \
+    (FILE_SLOT(gr_slot, (gslotnum)).script_head != 0)

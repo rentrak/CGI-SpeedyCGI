@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,12 +25,13 @@ void speedy_cb_alloc(
     CopyBuf *bp, int maxsz, int rdfd, int wrfd, char *buf, int sz
 )
 {
-    bp->buf	= buf;
-    bp->sz	= sz;
-    bp->maxsz	= maxsz;
-    bp->eof	= 0;
-    bp->rdfd	= rdfd;
-    bp->wrfd	= wrfd;
+    bp->buf		= buf;
+    bp->sz		= sz;
+    bp->maxsz		= maxsz;
+    bp->eof		= 0;
+    bp->rdfd		= rdfd;
+    bp->wrfd		= wrfd;
+    bp->write_err	= 0;
 }
 
 void speedy_cb_free(CopyBuf *bp) {
@@ -49,8 +50,10 @@ void speedy_cb_read(CopyBuf *bp) {
     switch(n = read(bp->rdfd, bp->buf + bp->sz, bp->maxsz - bp->sz))
     {
     case -1:
-	if (errno == EAGAIN) break;
-	/* Fall through */
+	/* If not ready to read, then all done. */
+	if (SP_NOTREADY(errno))
+	    break;
+	/* Fall through - assume eof if other read errors */
     case  0:
 	bp->eof = 1;
 	if (bp->sz == 0) {
@@ -63,18 +66,36 @@ void speedy_cb_read(CopyBuf *bp) {
     }
 }
 
+SPEEDY_INLINE static void cb_shift(CopyBuf *bp, int n) {
+    bp->sz -= n;
+    if (bp->sz)
+	speedy_memmove(bp->buf, bp->buf + n, bp->sz);
+}
+
 void speedy_cb_write(CopyBuf *bp) {
-    int n = write(bp->wrfd, bp->buf, bp->sz);
+    int n;
+
+    if (!bp->write_err) {
+	n = write(bp->wrfd, bp->buf, bp->sz);
+
+	/* If any error other than EAGAIN, then write error */
+	if (n == -1 && !SP_NOTREADY(errno))
+	    BUF_SET_WRITE_ERR(*bp, errno ? errno : EIO);
+    }
+
+    /* If error then pretend we did the write */
+    if (bp->write_err) 
+	n = bp->sz;
+
     if (n > 0) {
-	bp->sz -= n;
-	if (bp->sz) {
-	    speedy_memmove(bp->buf, bp->buf + n, bp->sz);
-	}
-	else if (bp->eof) {
+	cb_shift(bp, n);
+	if (bp->eof && !bp->sz)
 	    speedy_cb_free(bp);
-	}
     }
-    else if (n == -1 && errno != EAGAIN) {
-	bp->sz = 0;
-    }
+}
+
+int speedy_cb_shift(CopyBuf *bp) {
+    int retval = (bp->buf)[0];
+    cb_shift(bp, 1);
+    return retval;
 }

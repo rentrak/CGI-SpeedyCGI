@@ -2,6 +2,8 @@
 
 print "1..1\n";
 
+delete $ENV{SPEEDY_TIMEOUT};
+
 my $scr = 't/scripts/basic.2';
 my $cmd = "$ENV{SPEEDY} -- -t2 -M1 $scr";
 
@@ -17,6 +19,6 @@ my $two = `$cmd`;
 sleep 3;
 my $three = `$cmd`;
 
-## print "one=$one two=$two three=$three\n";
+#print STDERR "one=$one two=$two three=$three\n";
 
 print $one == 1 && $two == 2 && $three == 1 ? "ok\n" : "fail\n";

@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use SpeedyFile;
+require 'SpeedyFile.pl';
 
 my $indent;
 my $sw = 4;
@@ -55,6 +55,11 @@ if (my $g = $headval->{group_head}) {
     while (1) {
 	&out_struct($gr);
 	$indent += $sw;
+	if (my $n = $gr->value->{name}) {
+	    &out_head('Name');
+	    my $slot = $f->slot($n, 'grnm_slot');
+	    &out_struct($slot);
+	}
 	&out_head('Script List');
 	if (my $s = $gr->value->{script_head}) {
 	    &out_list($s, 'scr_slot');

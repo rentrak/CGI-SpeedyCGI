@@ -1,4 +1,18 @@
-Revision history for Perl extension CGI::SpeedyCGI.
+Revision history for Perl extension SpeedyCGI.
+
+2.10	Wed Jan 31 02:56:33 PST 2001
+
+	- Multiple scripts in one interpreter using the new Group option.
+	- Reduce speedy exec time by removing all extraneous shared-libs
+	- Make code smaller by adding ifdefs to separate frontend/backend code.
+	- Speedy frontend now dies on sigpipe if it gets epipe on fd 1 or 2
+	- The backend now always tracks the current directory of the frontend
+	- New "register_cleanup" method
+	- Build binaries for solaris and bsd ("make solpkg" and "make bsdpkg")
+	- Bug fixes:
+	    - Changing mtime on a script could cause temp-file corruption
+	    - After hitting maxruns, backend was not chdir'ing to the right
+	      directory before exec'ing itself.
 
 2.02	Sun Dec 17 21:43:02 PST 2000
 

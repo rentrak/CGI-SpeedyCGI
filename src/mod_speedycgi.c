@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -92,6 +92,11 @@
 #include "speedy.h"
 
 module MODULE_VAR_EXPORT speedycgi_module;
+
+static int talk_to_be(
+    request_rec *r, BUFF *script_io, BUFF *script_err, char *argsbuffer,
+    int alloc_size, int nph
+);
 
 static request_rec *global_r;
 
@@ -234,16 +239,27 @@ static int cgi_handler(request_rec *r)
     ap_note_cleanups_for_fd(r->pool, e);
     ap_bpushfd(script_err, e, e);
 
-    /* Fill in argsbuffer with the env/argv data to send */
+    /* Allocate argsbuffer and fill in with the env/argv data to send */
     argsbuffer = speedy_frontend_mkenv(
 	(const char * const *)ap_create_environment(r->pool, r->subprocess_env),
 	(const char * const *)script_argv,
 	HUGE_STRING_LEN, 0,
-	&sendenv_size, &alloc_size
+	&sendenv_size, &alloc_size, 1
     );
 
     /* Send over env/argv data */
     ap_bwrite(script_io, argsbuffer, sendenv_size);
+
+    retval = talk_to_be(r, script_io, script_err, argsbuffer, alloc_size, nph);
+    speedy_free(argsbuffer);
+    return retval;
+}
+
+static int talk_to_be(
+    request_rec *r, BUFF *script_io, BUFF *script_err, char *argsbuffer,
+    int alloc_size, int nph
+)
+{
 
     /* Transfer any put/post args, CERN style...
      * Note that we already ignore SIGPIPE in the core server.
@@ -272,7 +288,7 @@ static int cgi_handler(request_rec *r)
     }
 
     ap_bflush(script_io);
-    shutdown(s, 1);
+    shutdown(ap_bfileno(script_io, B_WR), 1);
 
     /* Handle script return... */
     if (script_io && !nph) {
@@ -281,7 +297,6 @@ static int cgi_handler(request_rec *r)
 	int ret;
 
 	if ((ret = ap_scan_script_header_err_buff(r, script_io, sbuf))) {
-	    speedy_free(argsbuffer);
 	    return ret;
 	}
 
@@ -318,14 +333,12 @@ static int cgi_handler(request_rec *r)
 	    ap_table_unset(r->headers_in, "Content-Length");
 
 	    ap_internal_redirect_handler(location, r);
-	    speedy_free(argsbuffer);
 	    return OK;
 	}
 	else if (location && r->status == 200) {
 	    /* XX Note that if a script wants to produce its own Redirect
 	     * body, it now has to explicitly *say* "Status: 302"
 	     */
-	    speedy_free(argsbuffer);
 	    return REDIRECT;
 	}
 
@@ -347,7 +360,6 @@ static int cgi_handler(request_rec *r)
 	ap_send_fb(script_io, r);
     }
 
-    speedy_free(argsbuffer);
     return OK;			/* NOT r->status, even if it has changed. */
 }
 
@@ -387,7 +399,7 @@ module MODULE_VAR_EXPORT speedycgi_module =
 
 void speedy_abort(const char *s) {
     ap_log_error(APLOG_MARK, APLOG_ERR, NULL, "mod_speedycgi failed: %s", s);
-    exit(1);
+    speedy_util_exit(1,0);
 }
 
 int speedy_execvp(const  char *filename, const char *const *argv)

@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -19,7 +19,6 @@
 
 # Type:
 #    str		string
-#    int		integer
 #    whole		whole number (>=0)
 #    natural		natural number (>=1)
 #
@@ -39,7 +38,7 @@ letter	t
 defval	3600
 defdesc	one hour
 context	all
-desc	If no new requests have been received after this many seconds,
+desc	If no new requests have been received after <number> seconds,
 desc	exit the persistent perl interpreter.  Zero indicates no timeout.
 
 option	MaxRuns
@@ -47,7 +46,7 @@ type	whole
 letter	r
 defval	500
 context	all
-desc	Once the perl interpreter has run this many times, re-exec the
+desc	Once the perl interpreter has run <number> times, re-exec the
 desc    backend process.  Zero indicates no maximum.  This option is useful
 desc	for processes that tend to consume resources over time.
 
@@ -58,7 +57,7 @@ defdesc	no max
 letter	M
 context	frontend
 desc	If non-zero, limits the number of speedy backends running for this
-desc	cgi script to this value.
+desc	cgi script to <number>.
 
 option	BackendProg
 type	str
@@ -85,20 +84,20 @@ type	natural
 letter	b
 context	speedy
 defval	1024
-desc	Use this many bytes for the buffer that sends data to the CGI script.
+desc	Use <number> bytes for the buffer that sends data to the CGI script.
 
 option	BufsizGet
 type	natural
 letter	B
 context	speedy
 defval	8192
-desc	Use this many bytes for the buffer that receives data from the CGI
+desc	Use <number> bytes for the buffer that receives data from the CGI
 desc	script.
 
 option  BECheckTimeout
 type	natural
 defval	1
-desc	The frontend waits this many seconds before waking up and checking for
+desc	The frontend waits <number> seconds before waking up and checking for
 desc	dead backends.
 
 option	RestatTimeout
@@ -118,3 +117,21 @@ type	toggle
 letter	v
 context	speedy
 desc	Print the SpeedyCGI version and exit.
+
+option	Group
+type	str
+letter	g
+context	frontend
+defval	none
+desc	Allow a single perl interpreter to run multiple scripts.
+desc	All scripts that are run with the same group name and by the same user
+desc	will be run by the same group of perl interpreters.
+desc	If the group name is "none" then grouping is disabled and each
+desc	interpreter will run one script.
+desc	Different group names allow scripts to be separated into
+desc	different groups.
+desc	Name is case-sensitive, and only the first 12-characters are
+desc	significant.
+desc	Specifying an empty group name is the same as specifying
+desc	the group name "default" - this allows just specifying "-g"
+desc	on the command line to turn on grouping.

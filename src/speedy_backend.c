@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -61,6 +61,7 @@ void speedy_backend_dispose(slotnum_t gslotnum, slotnum_t bslotnum) {
     }
 }
 
+#ifdef SPEEDY_FRONTEND
 slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
     slotnum_t head = gslot->be_wait;
@@ -76,6 +77,7 @@ slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum) {
     }
     return head;
 }
+#endif
 
 /* Insert into be_wait list, order reverse by maturity.  We want to go
  * at the beginning of our maturity list to preserve LIFO ordering so
@@ -84,6 +86,7 @@ slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum) {
  * Do not use "next_slot" or "prev_slot" in the code below.  This is
  * the be_wait list (be_wait_next, be_wait_prev)
  */
+#ifdef SPEEDY_BACKEND
 void speedy_backend_be_wait_put(slotnum_t gslotnum, slotnum_t bslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
     be_slot_t *bslot = &FILE_SLOT(be_slot, bslotnum);
@@ -119,6 +122,7 @@ void speedy_backend_be_wait_put(slotnum_t gslotnum, slotnum_t bslotnum) {
 	}
     }
 }
+#endif
 
 void speedy_backend_kill(slotnum_t gslotnum, slotnum_t bslotnum) {
     speedy_util_kill(FILE_SLOT(be_slot, bslotnum).pid, SIGKILL);
@@ -195,4 +199,15 @@ slotnum_t speedy_backend_create_slot(slotnum_t gslotnum) {
     bslot->prev_slot = 0;
 
     return bslotnum;
+}
+
+/* Shutdowns all the BE's in the idle queue - this will not remove the group */
+void speedy_backend_kill_idle(slotnum_t gslotnum) {
+    gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
+    slotnum_t bslotnum, next_slot;
+
+    for (bslotnum = gslot->be_wait; bslotnum; bslotnum = next_slot) {
+	next_slot = FILE_SLOT(be_slot, bslotnum).be_wait_next;
+	speedy_backend_kill(gslotnum, bslotnum);
+    }
 }

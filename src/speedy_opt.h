@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -28,7 +28,6 @@ typedef struct _OptRect {
 
 void speedy_opt_init(const char * const *argv, const char * const *envp);
 void speedy_opt_read_shbang();
-int speedy_opt_got_shbang();
 int speedy_opt_set(OptRec *optrec, const char *value);
 int speedy_opt_set_byname(const char *optname, const char *value);
 const char *speedy_opt_get(OptRec *optrec);
@@ -38,3 +37,4 @@ char **speedy_opt_perl_argv(const char *script_name);
 const char * const *speedy_opt_exec_argv();
 const char * const *speedy_opt_exec_envp();
 const char * const *speedy_opt_orig_argv();
+SPEEDY_INLINE const char *speedy_opt_script_fname();

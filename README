@@ -18,8 +18,11 @@ SYNOPSIS
      # See if we are running under SpeedyCGI or not.
      print "Running under speedy=", $sp->i_am_speedy ? 'yes' : 'no', "\n";
 
-     # Set up a shutdown handler
+     # Register a shutdown handler
      $sp->set_shutdown_handler(sub { do something here });
+
+     # Register a cleanup handler
+     $sp->register_cleanup(sub { do something here });
 
      # Set/get some SpeedyCGI options
      $sp->setopt('timeout', 30);
@@ -27,9 +30,8 @@ SYNOPSIS
 
 DESCRIPTION
     SpeedyCGI is a way to run CGI perl scripts persistently, which usually
-    makes them run much more quickly. Converting scripts to use SpeedyCGI is
-    in many cases as simple has changing the interpreter line at the top of
-    the script from
+    makes them run much more quickly. A script can be converted to SpeedyCGI
+    by changing the interpreter line at the top of the script from:
 
         #!/usr/bin/perl
 
@@ -38,22 +40,28 @@ DESCRIPTION
         #!/usr/bin/speedy
 
     After the script is initially run, instead of exiting, SpeedyCGI keeps
-    the perl interpreter running in memory. During subsequent runs, this
-    interpreter is used to handle new requests, instead of starting a new
-    perl interpreter for each execution.
+    the perl interpreter running. During subsequent runs, this interpreter
+    is used to handle new requests instead of starting a new perl
+    interpreter for each execution.
 
-    SpeedyCGI conforms to the CGI specification, and does not work inside
-    the web server. A very fast cgi-bin, written in C, is executed for each
-    request. This fast cgi-bin then contacts the persistent Perl process,
-    which is usually already in memory, to do the work and return the
+    SpeedyCGI conforms to the CGI specification, and normally does not work
+    inside the web server. A very fast cgi-bin, written in C, is executed
+    for each request. This fast cgi-bin then contacts the persistent Perl
+    process, which is usually already running, to do the work and return the
     results.
 
-    Since all of these processes run outside the web server, they can't
-    cause problems for the web server itself. Also, each perl program runs
-    as its own Unix process, so one program can't interfere with another.
+    Since the perl interpreter runs outside the web server, it can't cause
+    problems for the web server itself. By default each perl script runs in
+    its own Unix process, so one program can't interfere with another.
     Command line options can also be used to deal with programs that have
     memory leaks or other problems that might keep them from otherwise
     running persistently.
+
+    SpeedyCGI also provides an Apache module so that under the Apache web
+    server, scripts can be run without the overhead of doing a fork/exec for
+    each request. With this module a small amount of frontend code is run
+    within the web server - the perl interpreters still run outside the
+    server.
 
 OPTIONS
   Setting Option Values
@@ -113,8 +121,8 @@ OPTIONS
   Options Available
 
     BackendProg
-            Command Line    : -pstr
-            Default Value   : /usr/bin/speedy_backend
+            Command Line    : -p<string>
+            Default Value   : "/usr/bin/speedy_backend"
             Context         : mod_speedycgi, speedy
 
             Description:
@@ -122,44 +130,67 @@ OPTIONS
                 Path to the speedy backend program.
 
     BufsizGet
-            Command Line    : -BN
+            Command Line    : -B<number>
             Default Value   : 8192
             Context         : speedy
 
             Description:
 
-                Use this many bytes for the buffer that
+                Use <number> bytes for the buffer that
                 receives data from the CGI script.
 
     BufsizPost
-            Command Line    : -bN
+            Command Line    : -b<number>
             Default Value   : 1024
             Context         : speedy
 
             Description:
 
-                Use this many bytes for the buffer that sends
+                Use <number> bytes for the buffer that sends
                 data to the CGI script.
 
+    Group
+            Command Line    : -g<string>
+            Default Value   : "none"
+            Context         : mod_speedycgi, speedy
+
+            Description:
+
+                Allow a single perl interpreter to run
+                multiple scripts. All scripts that are run
+                with the same group name and by the same user
+                will be run by the same group of perl
+                interpreters. If the group name is "none"
+                then grouping is disabled and each
+                interpreter will run one script. Different
+                group names allow scripts to be separated
+                into different groups. Name is
+                case-sensitive, and only the first
+                12-characters are significant. Specifying an
+                empty group name is the same as specifying
+                the group name "default" - this allows just
+                specifying "-g" on the command line to turn
+                on grouping.
+
     MaxBackends
-            Command Line    : -MN
+            Command Line    : -M<number>
             Default Value   : 0 (no max)
             Context         : mod_speedycgi, speedy
 
             Description:
 
                 If non-zero, limits the number of speedy
-                backends running for this cgi script to this
-                value.
+                backends running for this cgi script to
+                <number>.
 
     MaxRuns
-            Command Line    : -rN
+            Command Line    : -r<number>
             Default Value   : 500
             Context         : mod_speedycgi, module, speedy
 
             Description:
 
-                Once the perl interpreter has run this many
+                Once the perl interpreter has run <number>
                 times, re-exec the backend process.  Zero
                 indicates no maximum.  This option is useful
                 for processes that tend to consume resources
@@ -167,7 +198,7 @@ OPTIONS
 
     PerlArgs
             Command Line    : N/A
-            Default Value   : 
+            Default Value   : ""
             Context         : mod_speedycgi
 
             Description:
@@ -176,19 +207,19 @@ OPTIONS
                 interpreter.
 
     Timeout
-            Command Line    : -tN
+            Command Line    : -t<number>
             Default Value   : 3600 (one hour)
             Context         : mod_speedycgi, module, speedy
 
             Description:
 
                 If no new requests have been received after
-                this many seconds, exit the persistent perl
+                <number> seconds, exit the persistent perl
                 interpreter.  Zero indicates no timeout.
 
     TmpBase
-            Command Line    : -Tstr
-            Default Value   : /tmp/speedy
+            Command Line    : -T<string>
+            Default Value   : "/tmp/speedy"
             Context         : mod_speedycgi, speedy
 
             Description:
@@ -213,11 +244,20 @@ METHODS
 
             my $sp = CGI::SpeedyCGI->new;
 
+    register_cleanup($function_ref)
+        Register a function that will be called at the end of each request,
+        after your script finishes running, but before STDOUT and STDERR are
+        closed. Multiple functions can be added by calling the method more
+        than once. At the end of the request, each function will be called
+        in the order in which it was registered.
+
+            $sp->register_cleanup(\&cleanup_func);
+
     set_shutdown_handler($function_ref)
         Register a function that will be called right before the perl
         interpreter exits. This is not at the end of each request, it is
-        when the perl interpreter decides to exit completely (due to a
-        timeout, maxruns, etc)
+        when the perl interpreter decides to exit completely due to a
+        Timeout or reaching MaxRuns.
 
             $sp->set_shutdown_handler(sub {$dbh->logout});
 
@@ -228,6 +268,13 @@ METHODS
         it is in.
 
             $sp->i_am_speedy;
+
+        To make your script as portable as possible, you can use the
+        following test to make sure both the SpeedyCGI module is available
+        and you are running under SpeedyCGI:
+
+            if (eval {require CGI::SpeedyCGI} && CGI::SpeedyCGI->i_am_speedy) {
+                Do something SpeedyCGI specific here...
 
     setopt($optname, $value)
         Set one of the SpeedyCGI options given in the section on "Options
@@ -243,13 +290,42 @@ METHODS
             $sp->getopt('TIMEOUT');
 
 INSTALLATION
-    SpeedyCGI has been tried with perl version 5.004_04 under Solaris 2.6
-    and version 5.005_03, under Redhat Linux 6.1. There may be problems with
-    other OSes or earlier versions of Perl.
+    To install SpeedyCGI you will need to either download a binary package
+    for your OS, or compile SpeedyCGI from source code. See the section on
+    "DOWNLOADING" for information on where to obtain the source code and
+    binaries.
+
+  Binary Installation
+
+    Once you have downloaded the binary package for your OS, you'll need to
+    install it using the normal package tools for your OS. The commands to
+    do that are:
+
+    Linux
+         rpm -i <filename>
+
+    Solaris
+         gunzip <filename>.gz
+         pkgadd -d <filename>
+
+    BSD pkg_add <filename>
+
+    If you are also installing the apache module you will have to configure
+    Apache as documented in the section on "Apache Configuration".
+
+  Source Code Installation
+
+    To compile SpeedyCGI you will need perl 5.004 or later, and a C
+    compiler, preferably the same one that your perl distribution was
+    compiled with. SpeedyCGI is known to work under Solaris, Redhat Linux,
+    FreeBSD and OpenBSD. There may be problems with other OSes or other
+    versions of Perl. SpeedyCGI may not work with threaded perl -- as of
+    release 2.10, Linux and Solaris seem to work OK with threaded perl, but
+    FreeBSD does not.
 
   Standard Install
 
-    To install, do the following:
+    To do a standard install from source code, execute the following:
 
         perl Makefile.PL
         make
@@ -273,9 +349,9 @@ INSTALLATION
 
   Apache Installation
 
-    To use the optional apache mod_speedycgi module you must have the apxs
-    command in your path. Redhat includes this command with the "apache-
-    devel" RPM, though it may not work properly for installation.
+    To compile the optional apache mod_speedycgi module you must have the
+    apxs command in your path. Redhat includes this command with the
+    "apache-devel" RPM, though it may not work properly for installation.
 
     If the apache installation fails:
 
@@ -334,10 +410,10 @@ BUGS / TODO
 
 FREQUENTLY ASKED QUESTIONS
     How does the speedy front end connect to the back end process?
-        Via a Unix socket in /tmp. A queue is kept in /tmp that holds an
-        entry for each process. In that queue are the pids of the perl
-        processes waiting for connections. The CGI-front end pulls a process
-        out of this queue, connects to its socket, sends over the
+        Via a Unix socket in /tmp. A queue is kept in a shared file in /tmp
+        that holds an entry for each process. In that queue are the pids of
+        the perl processes waiting for connections. The CGI frontend pulls a
+        process out of this queue, connects to its socket, sends over the
         environment and argv, and then uses this socket for stdin/stdout to
         the perl process.
 
@@ -379,7 +455,9 @@ FREQUENTLY ASKED QUESTIONS
 
         Also, if you create global variables with "my", you shouldn't try to
         reference those variables from within a subroutine - you should pass
-        them into the subroutine instead.
+        them into the subroutine instead. Or better yet just declare global
+        variables with "use vars" instead of "my" to avoid the problem
+        altogether.
 
         Here's a good explanation of the problem - it's for mod_perl, but
         the same thing applies to speedycgi:
@@ -389,6 +467,35 @@ FREQUENTLY ASKED QUESTIONS
         If all else fails you can disable persistence by setting MaxRuns to
         1. The only benefit of this over normal perl is that speedy will
         pre-compile your script between requests.
+
+    How do I keep a persistent connect to a database?
+        Since globals retain their values between runs, the best way to do
+        this is to store the connection in a global variable, then check on
+        each run to see if that variable is already defined.
+
+        For example, if your code has an "open_db_connection" subroutine
+        that returns a database connection handle, you can use the code
+        below to keep a persistent connection:
+
+            use vars qw($dbh);
+            unless (defined($dbh)) {
+                $dbh = &open_db_connection;
+            }
+
+        This code will store a persistent database connection handle in the
+        global variable "$dbh" and only initialize it the first time the
+        code is run. During subsequent runs, the existing connection is re-
+        used.
+
+        You may also want to check the connection each time before using it,
+        in case it is not working for some reason. So, assuming you have a
+        subroutine named "db_connection_ok" that returns true if the db
+        connection is working, you can use code like this:
+
+            use vars qw($dbh);
+            unless (defined($dbh) && &db_connection_ok($dbh)) {
+                $dbh = &open_db_connection;
+            }
 
 MAILING LIST
     The mailing list address is speedycgi@newlug.org. Subscribe by sending a
@@ -402,11 +509,11 @@ MAILING LIST
 DOWNLOADING
   Binaries
 
-    Redhat RPMs can be found at:
+    Binaries for many OSes can be found at:
 
-        http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/rpm
+        http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries
 
-    Debian packages can be found at:
+    There are also some older debian packages available from:
 
         http://www.debian.org/Packages/stable/interpreters/speedy-cgi-perl.html
         http://www.debian.org/Packages/unstable/web/libapache-mod-speedycgi.html
@@ -438,8 +545,12 @@ AUTHOR
 SEE ALSO
     perl(1), httpd(8), apxs(8).
 
+TRANSLATIONS
+    Japanese
+        http://member.nifty.ne.jp/hippo2000/perltips/CGI/SpeedyCGI.htm
+
 COPYRIGHT
-    Copyright (C) 2000 Daemon Consulting Inc.
+    Copyright (C) 2001 Daemon Consulting Inc.
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU General Public License as published by the

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,19 +19,19 @@
 
 typedef unsigned short slotnum_t;
 
-#define GR_NAMELEN	max(sizeof(gr_slot_t), sizeof(scr_slot_t))
+#define GR_NAMELEN	12
 
 typedef struct _scr_slot { /* 18 bytes for a 64-bit dev_t, 14 if 32-bit */
-    slotnum_t	next_slot;
     dev_t	dev_num;
     ino_t	ino_num;
     time_t	mtime;
+    slotnum_t	next_slot;
 } scr_slot_t;
 
 #define PROC_SLOT_COMMON \
+    pid_t	pid; \
     slotnum_t	next_slot; \
-    slotnum_t	prev_slot; \
-    pid_t	pid;
+    slotnum_t	prev_slot;
     
 typedef struct _proc_slot { /* 8 bytes */
     PROC_SLOT_COMMON
@@ -77,8 +77,14 @@ typedef union _slot {
     free_slot_t	free_slot;
 } slot_t;
 
+/* For speedy_dump to get the right size of a slot */
+typedef struct _dummy_slot {
+    char slot_size[sizeof(slot_t)];
+} dummy_slot_t;
+
 #define MAX_SLOTS ((1<<(sizeof(slotnum_t)*8))-6)
-#define SLOT_CHECK(n) ((n) > FILE_HEAD.slots_alloced ? speedy_slot_check(n) : (n))
+#define BAD_SLOTNUM(n) ((n) > FILE_HEAD.slots_alloced)
+#define SLOT_CHECK(n) (BAD_SLOTNUM(n) ?  speedy_slot_check(n) : (n))
 
 slotnum_t speedy_slot_alloc();
 void speedy_slot_free(slotnum_t slotnum);

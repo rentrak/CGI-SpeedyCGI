@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,27 +19,11 @@
 
 #define LISTEN_BACKLOG		2
 
-#ifndef PREF_FD_ACCEPT_S
-#   define PREF_FD_ACCEPT_S -1
-#endif
-#ifndef PREF_FD_ACCEPT_E
-#   define PREF_FD_ACCEPT_E -1
-#endif
-#ifndef PREF_FD_LISTENER
-#   define PREF_FD_LISTENER -1
-#endif
-#ifndef PREF_FD_CONNECT_S
-#   define PREF_FD_CONNECT_S -1
-#endif
-#ifndef PREF_FD_CONNECT_E
-#   define PREF_FD_CONNECT_E -1
-#endif
-
 void speedy_ipc_listen(slotnum_t slotnum);
 void speedy_ipc_listen_fixfd(slotnum_t slotnum);
 void speedy_ipc_unlisten();
 int speedy_ipc_connect(slotnum_t slotnum, int s, int e);
 void speedy_ipc_connect_prepare(int *s, int *e);
 int speedy_ipc_accept_ready(int wakeup);
-int speedy_ipc_accept(int wakeup, int *s, int *e);
+int speedy_ipc_accept(int wakeup);
 void speedy_ipc_cleanup(slotnum_t slotnum);

@@ -1,6 +1,6 @@
 
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,8 +20,10 @@
 
 #include "speedy.h"
 
-#define PREFIX		"SPEEDY_"
-#define PREFIX_LEN	(sizeof(PREFIX)-1)
+#define PREFIX_MATCH(s) \
+    (s[0] == 'S' && s[1] == 'P' && s[2] == 'E' && s[3] == 'E' && \
+     s[4] == 'D' && s[5] == 'Y' && s[6] == '_')
+#define PREFIX_LEN	7
 #define STRLIST_MALLOC	10
 
 /*
@@ -165,6 +167,8 @@ int speedy_opt_set(OptRec *optrec, const char *value) {
     if (optrec->type == OTYPE_STR) {
 	if (optrec->changed && optrec->value)
 	    speedy_free(optrec->value);
+	if (optrec == &OPTREC_GROUP && *value == '\0')
+	    value = "default";
 	optrec->value = speedy_util_strdup(value);
     }
     else if (optrec->type == OTYPE_TOGGLE) {
@@ -192,7 +196,7 @@ const char *speedy_opt_get(OptRec *optrec) {
 	return (char*)optrec->value;
     } else {
 	static char buf[20];
-	sprintf(buf, "%d", (int)optrec->value);
+	sprintf(buf, "%u", (int)optrec->value);
 	return buf;
     }
 }
@@ -201,7 +205,7 @@ static int ocmp(const void *a, const void *b) {
     return strcmp((const char *)a, ((OptRec *)b)->name);
 }
 
-static int opt_set_byname2(const char *optname, int len, const char *value) {
+static int opt_set_byname(const char *optname, int len, const char *value) {
     OptRec *match;
     char *upper;
     int retval = 0;
@@ -212,15 +216,12 @@ static int opt_set_byname2(const char *optname, int len, const char *value) {
     while (len--)
 	upper[len] = toupper(optname[len]);
 
-    match = bsearch(upper, speedy_optdefs, SPEEDY_NUMOPTS, sizeof(OptRec), &ocmp);
+    match =
+	bsearch(upper, speedy_optdefs, SPEEDY_NUMOPTS, sizeof(OptRec), &ocmp);
     if (match)
 	retval = speedy_opt_set(match, value);
     speedy_free(upper);
     return retval;
-}
-
-int speedy_opt_set_byname(const char *optname, const char *value) {
-    return opt_set_byname2(optname, strlen(optname), value);
 }
 
 static void process_speedy_opts(StrList *speedy_opts, int len) {
@@ -304,35 +305,38 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
 
     /* Set our OptRec values based on the environment */
     for (p = envp; *p; ++p) {
-	if (strncmp(*p, PREFIX, PREFIX_LEN) == 0) {
-	    const char *optname = *p + PREFIX_LEN;
+	const char *s = *p;
+	if (PREFIX_MATCH(s)) {
+	    const char *optname = s + PREFIX_LEN;
 	    const char *eqpos = strchr(optname, '=');
 	    if (eqpos)
-		(void) opt_set_byname2(optname, eqpos - optname, eqpos+1);
+		(void) opt_set_byname(optname, eqpos - optname, eqpos+1);
 	}
     }
 
     strlist_free(&speedy_opts);
     strlist_free(&script_argv);
 
-#   ifdef SPEEDY_VERSION
-	if (OPTVAL_VERSION) {
-	    char buf[200];
+#if defined(SPEEDY_VERSION) && defined(PATCHLEVEL) && defined(SUBVERSION) && \
+    defined(ARCHNAME)
 
-	    sprintf(buf,
-	        "SpeedyCGI %s version %s built for perl version 5.%03d_%02d on %s\n",
-	        SPEEDY_PROGNAME, SPEEDY_VERSION, PATCHLEVEL, SUBVERSION, ARCHNAME);
-	    write(2, buf, strlen(buf));
-	    exit(0);
-	}
-#   endif
+    if (OPTVAL_VERSION) {
+	char buf[200];
+
+	sprintf(buf,
+	    "SpeedyCGI %s version %s built for perl version 5.%03d_%02d on %s\n",
+	    SPEEDY_PROGNAME, SPEEDY_VERSION, PATCHLEVEL, SUBVERSION, ARCHNAME);
+	write(2, buf, strlen(buf));
+	speedy_util_exit(0,0);
+    }
+#endif
 }
 
 /* Read the script file for options on the #! line at top. */
 void speedy_opt_read_shbang() {
-    int maplen;
     char *argv[3], *arg0;
     StrList speedy_opts;
+    SpeedyMapInfo *mi;
     const char *maddr;
 
     if (got_shbang)
@@ -340,16 +344,14 @@ void speedy_opt_read_shbang() {
     
     got_shbang = 1;
 
-    maplen = min(speedy_script_getstat()->st_size, 1024);
-	
-    maddr = (const char *)
-	mmap(0, maplen, PROT_READ, MAP_SHARED, speedy_script_open(), 0);
-    if (maddr == (const char *)MAP_FAILED)
-	speedy_util_die("mmap");
+    mi = speedy_script_mmap(1024);
+    if (!mi)
+	speedy_util_die("script read failed");
 
-    if (maplen > 2 && maddr[0] == '#' && maddr[1] == '!') {
+    maddr = (const char *)mi->addr;
+    if (mi->maplen > 2 && maddr[0] == '#' && maddr[1] == '!') {
 	const char *s = maddr + 2, *t;
-	int l = maplen - 2;
+	int l = mi->maplen - 2;
 	    
 	/* Find the whitespace after the interpreter command */
 	while (l && !isspace((int)*s)) {
@@ -379,11 +381,7 @@ void speedy_opt_read_shbang() {
 	strlist_free(&speedy_opts);
 	speedy_free(argv[1]);
     }
-    (void) munmap((void*) maddr, maplen);
-}
-
-int speedy_opt_got_shbang() {
-    return got_shbang;
+    speedy_script_munmap();
 }
 
 void speedy_opt_set_script_argv(const char * const *argv) {
@@ -397,13 +395,18 @@ const char * const *speedy_opt_script_argv() {
     return (const char * const *)(strlist_export(&exec_argv) + script_argv_loc);
 }
 
+SPEEDY_INLINE const char *speedy_opt_script_fname() {
+    return exec_argv.ptrs[script_argv_loc];
+}
+
+#ifdef SPEEDY_BACKEND
 char **speedy_opt_perl_argv(const char *script_name) {
-    static StrList *full_perl_argv;
+    static StrList *full_perl_argv, argv_storage;
 
     if (full_perl_argv)
 	strlist_free(full_perl_argv);
     else
-	full_perl_argv = (StrList*)speedy_malloc(sizeof(StrList));
+	full_perl_argv = &argv_storage;
 
     /* Append the script argv to the end of perl_argv */
     strlist_init(full_perl_argv);
@@ -415,16 +418,19 @@ char **speedy_opt_perl_argv(const char *script_name) {
 
     return strlist_export(full_perl_argv);
 }
+#endif
 
 const char * const *speedy_opt_orig_argv() {
     return orig_argv;
 }
 
+const char * const *speedy_opt_exec_envp() {
+    return (const char * const *)strlist_export(&exec_envp);
+}
+
+#ifdef SPEEDY_FRONTEND
 const char * const *speedy_opt_exec_argv() {
     exec_argv.ptrs[0] = OPTVAL_BACKENDPROG;
     return (const char * const *)strlist_export(&exec_argv);
 }
-
-const char * const *speedy_opt_exec_envp() {
-    return (const char * const *)strlist_export(&exec_envp);
-}
+#endif

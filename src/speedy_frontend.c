@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,6 +18,31 @@
  */
 
 #include "speedy.h"
+
+void speedy_frontend_dispose(slotnum_t gslotnum, slotnum_t fslotnum) {
+    if (fslotnum) {
+	gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
+	fe_slot_t *fslot = &FILE_SLOT(fe_slot, fslotnum);
+	slotnum_t next = fslot->next_slot;
+	slotnum_t prev = fslot->prev_slot;
+
+	/* Update tail if we're the tail */
+	if (gslot->fe_tail == fslotnum)
+	    gslot->fe_tail = prev;
+
+	if (prev) {
+	    FILE_SLOT(fe_slot, prev).next_slot = next;
+	} else {
+	    gslot->fe_wait = next;
+	}
+	if (next) {
+	    FILE_SLOT(fe_slot, next).prev_slot = prev;
+	}
+	speedy_slot_free(fslotnum);
+    }
+}
+
+#ifdef SPEEDY_FRONTEND
 
 #define BE_SUFFIX "_backend"
 static int did_spawns;
@@ -56,7 +81,7 @@ static void backend_spawn(slotnum_t gslotnum) {
 	pid = fork();
 
 	if (pid == -1) {
-	    _exit(1);
+	    speedy_util_exit(1,1);
 	}
 	else if (pid) {
 	    /* Parent of Grandchild */
@@ -67,7 +92,7 @@ static void backend_spawn(slotnum_t gslotnum) {
 	     */
 	    FILE_SLOT(be_slot, bslotnum).pid = pid;
 
-	    _exit(0);
+	    speedy_util_exit(0,1);
 	}
 	else {
 	    /* Grandchild */
@@ -83,7 +108,7 @@ static void backend_spawn(slotnum_t gslotnum) {
 		const char *orig_file = speedy_opt_orig_argv()[0];
 		if (orig_file && *orig_file) {
 		    char *fname =
-			speedy_malloc(strlen(orig_file) + sizeof(BE_SUFFIX) + 1);
+			speedy_malloc(strlen(orig_file)+sizeof(BE_SUFFIX)+1);
 
 		    sprintf(fname, "%s%s", orig_file, BE_SUFFIX);
 		    speedy_util_execvp(fname, argv);
@@ -159,29 +184,6 @@ static int backend_check(slotnum_t gslotnum, int in_queue) {
 	did_spawns = 1;
     }
     return 1;
-}
-
-void speedy_frontend_dispose(slotnum_t gslotnum, slotnum_t fslotnum) {
-    if (fslotnum) {
-	gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
-	fe_slot_t *fslot = &FILE_SLOT(fe_slot, fslotnum);
-	slotnum_t next = fslot->next_slot;
-	slotnum_t prev = fslot->prev_slot;
-
-	/* Update tail if we're the tail */
-	if (gslot->fe_tail == fslotnum)
-	    gslot->fe_tail = prev;
-
-	if (prev) {
-	    FILE_SLOT(fe_slot, prev).next_slot = next;
-	} else {
-	    gslot->fe_wait = next;
-	}
-	if (next) {
-	    FILE_SLOT(fe_slot, next).prev_slot = prev;
-	}
-	speedy_slot_free(fslotnum);
-    }
 }
 
 /* Go up the fe_wait list, going to the next group if we're at the
@@ -318,7 +320,7 @@ static void sig_handler_setup() {
     sigprocmask(SIG_BLOCK, &block_sigs, &sigset_save);
 
     /* Make an unblock mask for our signals */
-    speedy_memcpy(&unblock_sigs, &sigset_save, sizeof(sigset_save));
+    unblock_sigs = sigset_save;
     for (i = 0; i < NUMSIGS; ++i) {
 	sigdelset(&unblock_sigs, signum[i]);
     }
@@ -326,10 +328,8 @@ static void sig_handler_setup() {
     sig_setup_done = 1;
 }
 
-static void sig_wait() {
-    for (got_sig = 0; !got_sig; sigsuspend(&unblock_sigs))
-	;
-}
+#define sig_wait() \
+	for (got_sig = 0; !got_sig;) sigsuspend(&unblock_sigs)
 
 /*
  * End of Signal handling routines
@@ -352,9 +352,8 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
     fslot->pid = speedy_util_getpid();
 
     /* Add ourself to the end of the fe queue */
-    if ((tail = gslot->fe_tail)) {
+    if ((tail = gslot->fe_tail))
 	FILE_SLOT(fe_slot, tail).next_slot = fslotnum;
-    }
     fslot->prev_slot = tail;
     fslot->next_slot = 0;
     gslot->fe_tail = fslotnum;
@@ -407,11 +406,24 @@ static slotnum_t get_a_backend_hard(slotnum_t gslotnum, slotnum_t sslotnum) {
 	/* Remove our FE slot from the queue.  */
 	speedy_frontend_dispose(gslotnum, fslotnum);
 
+#ifdef ALTERNATE_SPAWNING
+	if (retval && at_front && gslot->fe_wait) {
+	    int be_count, be_spawning;
+
+	    count_bes(gslot, &be_count, &be_spawning);
+	    if (!be_spawning) {
+		speedy_util_kill(
+		    FILE_SLOT(fe_slot, gslot->fe_wait).pid, SIGALRM
+		);
+	    }
+	}
+#else
 	/* If we were at the beginning of the list and there are other fe's
 	 * waiting, we should assist them by starting more backends.
 	 */
-	if (retval && at_front)
+	if (retval && at_front && FILE_SLOT(gr_slot, gslotnum).fe_wait)
 	    (void) backend_check(gslotnum, 0);
+#endif
     }
 
     /* Put sighandlers back to their original state */
@@ -454,7 +466,7 @@ static slotnum_t get_a_backend(pid_t *pid) {
 
 
 void speedy_frontend_connect(int *s, int *e) {
-    
+
     /* Create sockets in preparation for connect.  This may take a while */
     speedy_ipc_connect_prepare(s, e);
 
@@ -467,7 +479,7 @@ void speedy_frontend_connect(int *s, int *e) {
 
 	/* Find a backend */
 	if ((bslotnum = get_a_backend(&pid))) {
-
+	    
 	    /* Try to talk to this backend.  If successful, return */
 	    if (speedy_ipc_connect(bslotnum, *s, *e))
 		break;
@@ -482,75 +494,187 @@ void speedy_frontend_connect(int *s, int *e) {
     speedy_script_close();
 }
 
-/* Return the size of buffer needed to send array. */
-static int array_bufsize(const char * const * p) {
-    int l, sz = sizeof(int);	/* bytes for terminator */
-    for (; *p; ++p) {
-	if ((l = strlen(*p))) sz += sizeof(int) + l;
-    }
-    return sz;
+typedef struct {
+    char *buf;
+    int	 alloced;
+    int  len;
+} SpeedyBuf;
+
+/* Return size of the buffer needed to send a string of the given length */
+#define STR_BUFSIZE(l) (1 + (l >= MAX_SHORT_STR ? sizeof(int) : 0) + l)
+
+/* Add something to the buffer */
+#define BUF_ENLARGE(b,l) \
+    if ((b)->len + (l) > (b)->alloced) \
+	enlarge_buf((b),(l))
+
+#define BUF_REALLOC(b,sz) \
+    (b)->buf = speedy_realloc((b)->buf, (b)->alloced = (sz))
+
+#define BUF_SHRINK(b) BUF_REALLOC(b, (b)->len)
+
+#define ADD2(b,s,l) \
+    speedy_memcpy((b)->buf + (b)->len, (s), (l)); \
+    (b)->len += (l)
+
+#define ADD(b,s,l) BUF_ENLARGE(b,l); ADD2(b,s,l)
+
+#define ADDCHAR2(b,c) ((b)->buf)[(b)->len++] = (char)c
+    
+#define ADDCHAR(b,c) BUF_ENLARGE(b,1); ADDCHAR2(b,c)
+
+#define ADD_DEVINO(b,stbuf) \
+    do { \
+	SpeedyDevIno devino = speedy_util_stat_devino(stbuf); \
+	ADD((b), &devino, sizeof(SpeedyDevIno)); \
+    } while (0)
+
+#define ADD_STRING(b, s, l) \
+    do { \
+	if ((l) >= MAX_SHORT_STR) { \
+	    BUF_ENLARGE(b, (sizeof(int)+1)); \
+	    ADDCHAR2(b, MAX_SHORT_STR); \
+	    ADD2(b, &(l), sizeof(int)); \
+	} else { \
+	    ADDCHAR(b, l); \
+	} \
+	ADD(b, s, l); \
+    } while (0)
+
+static void enlarge_buf(SpeedyBuf *b, int min_to_add) {
+    int new_size = b->alloced * 2;
+    new_size = max(new_size, b->len + min_to_add);
+    BUF_REALLOC(b, new_size);
 }
 
-static int get_env_size(
-    const char * const * envp, const char * const * scr_argv
-)
-{
-    return 1 + array_bufsize(envp) +		/* env */
-	   1 + array_bufsize(scr_argv+1) +	/* argv */
-	   1;					/* terminator */
+static void alloc_buf(SpeedyBuf *b, int bytes) {
+    b->buf = speedy_malloc(b->alloced = bytes);
+    b->len = 0;
 }
 
-#define ADD(s,d,l,t) speedy_memcpy(d,s,(l)*sizeof(t)); (d) += ((l)*sizeof(t))
+/* Add a string to the buffer */
+static void add_string(SpeedyBuf *b, const char *s, int l) {
+    ADD_STRING(b, s, l);
+}
 
 /* Copy a block of strings into the buffer,  */
-static void add_strings(char *bp[], const char * const * p) {
+static void add_strings(SpeedyBuf *b, const char * const * p) {
     int l;
+    const char *s;
 
-    /* Put in length plus string, without terminator */
-    for (; *p; ++p) {
-	if ((l = strlen(*p))) {
-	    ADD(&l, *bp, 1, int);
-	    ADD(*p, *bp, l, char);
+    /* Add strings in p array */
+    for (; (s = *p); ++p) {
+	if ((l = strlen(s))) {
+	    ADD_STRING(b, s, l);
 	}
     }
 
     /* Terminate with zero-length string */
-    l = 0;
-    ADD(&l, *bp, 1, int);
-}
-
-/* Fill in the environment to send. */
-static void env_copy(
-    char *buf, const char * const * envp, const char * const * scr_argv
-)
-{
-    /* Put env into buffer */
-    *buf++ = 'E';
-    add_strings(&buf, envp);
-
-    /* Put argv into buffer */
-    *buf++ = 'A';
-    add_strings(&buf, scr_argv+1);
-
-    /* End */
-    *buf++ = ' ';
+    ADDCHAR(b, 0);
 }
 
 char *speedy_frontend_mkenv(
-    const char * const * envp, const char * const * scr_argv,
-    int min_alloc, int min_free,
-    int *env_size, int *buf_size
+    const char * const * envp, const char * const * scr_argv, int min_alloc,
+    int min_free, int *env_size, int *buf_size, int script_has_cwd
 )
 {
-    int free;
-    char *buf;
+    SpeedyBuf b;
+    struct stat dir_stat;
+    const char *script_fname = speedy_opt_script_fname();
 
-    *env_size = get_env_size(envp, scr_argv);
-    *buf_size = max(min_alloc, *env_size);
-    free = *buf_size - *env_size;
-    if (free < min_free) {
-	*buf_size += (min_free - free);
+    if (!script_fname)
+	speedy_script_missing();
+
+    /* Create buffer */
+    alloc_buf(&b, min_alloc);
+
+    /* Add env and argv */
+    add_strings(&b, envp);
+    add_strings(&b, scr_argv+1);
+
+    /* Put script filename into buffer */
+    add_string(&b, script_fname, strlen(script_fname));
+
+    /* Put script device/inode into buffer */
+    ADD_DEVINO(&b, speedy_script_getstat());
+
+    /* Handle passing over cwd */
+    if (script_has_cwd) {
+	ADDCHAR(&b, SPEEDY_CWD_IN_SCRIPT);
     }
-    env_copy((buf = (char*) speedy_malloc(*buf_size)), envp, scr_argv);
-    return buf;
+    else if (stat(".", &dir_stat) != -1) {
+	ADDCHAR(&b, SPEEDY_CWD_DEVINO);
+	ADD_DEVINO(&b, &dir_stat);
+    } else {
+	ADDCHAR(&b, SPEEDY_CWD_UNKNOWN);
+    }
+
+    /* Save size of the buffer with just the environment */
+    *env_size = b.len;
+
+    /* Must leave a minimum amount of free space in the buffer */
+    if (b.alloced - b.len < min_free) {
+	int needed = min_free - (b.alloced - b.len);
+	enlarge_buf(&b, needed);
+	b.len += needed;
+    }
+
+    BUF_SHRINK(&b);
+    *buf_size = b.alloced;
+
+    return b.buf;
 }
+
+void speedy_frontend_proto2(int err_sock, int first_byte) {
+    int n, cwd_len, buflen;
+    char *bp, *cwd;
+    PollInfo pi;
+    SpeedyBuf b;
+
+    if (!first_byte)
+	return;
+
+    /* Get current directory */
+    cwd = speedy_util_getcwd();
+    cwd_len = cwd ? strlen(cwd) : 0;
+
+    /* Create buffer for the string */
+    alloc_buf(&b, STR_BUFSIZE(cwd_len));
+
+    /* Put cwd into the buffer */
+    if (cwd) {
+	add_string(&b, cwd, cwd_len);
+	speedy_free(cwd);
+    } else {
+	add_string(&b, "", 0);
+    }
+
+    /* Send it over */
+    speedy_poll_init(&pi, err_sock);
+    bp = b.buf;
+    buflen = b.len;
+    while (1) {
+
+	/* TEST - send over one byte at a time to test the poll */
+	/* n = write(err_sock, bp, 1); */
+
+	n = write(err_sock, bp, buflen);
+	if (n == -1 && SP_NOTREADY(errno))
+	    n = 0;
+	if (n == -1)
+	    break;
+
+	if (!(buflen -= n))
+	    break;
+	bp += n;
+
+	/* Do this instead of bothering to change socket to non-blocking */
+	speedy_poll_quickwait(&pi, err_sock, SPEEDY_POLLOUT, 1000);
+    }
+    speedy_poll_free(&pi);
+    speedy_free(b.buf);
+
+    shutdown(err_sock, 1);
+}
+
+#endif /* SPEEDY_FRONTEND */

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -23,13 +23,15 @@
 
 speedy_file_t		*speedy_file_maddr;
 static int		file_fd = -1;
-static int		fd_is_suspect;
 static int		maplen;
 static int		file_locked;
 static char		*file_name;
 static struct stat	file_stat;
 static int		cur_state;
 static time_t		last_reopen;
+#ifdef SPEEDY_BACKEND
+static int		fd_is_suspect;
+#endif
 
 #define fillin_fl(fl)		\
     fl.l_whence	= SEEK_SET;	\
@@ -73,8 +75,11 @@ static void file_unlock() {
 
 /* Only call this if you're sure the fd is not suspect */
 static void file_close2() {
+
+#ifdef SPEEDY_BACKEND
     if (fd_is_suspect)
 	DIE_QUIET("file_close2: assertion failed - fd_is_suspect");
+#endif
 
     file_unlock();
     file_unmap();
@@ -82,6 +87,12 @@ static void file_close2() {
 	(void) close(file_fd);
 	file_fd = -1;
     }
+}
+
+
+#ifdef SPEEDY_BACKEND
+SPEEDY_INLINE void speedy_file_fd_is_suspect() {
+    fd_is_suspect = 1;
 }
 
 static void fix_suspect_fd() {
@@ -100,13 +111,11 @@ static void fix_suspect_fd() {
 	fd_is_suspect = 0;
     }
 }
+#endif
 
 
-/* Stat our file into file_stat.  Possibly die if different file */
-static void get_stat() {
-    if (fstat(file_fd, &file_stat) == -1)
-	speedy_util_die("fstat");
-}
+#define get_stat() \
+    if (fstat(file_fd, &file_stat) == -1) speedy_util_die("fstat")
 
 static void remove_file() {
     FILE_HEAD.file_removed = 1;
@@ -119,9 +128,12 @@ static void file_lock() {
     int tries = 5;
     time_t now;
 
-    if (file_locked) return;
+    if (file_locked)
+	return;
 
+#ifdef SPEEDY_BACKEND
     fix_suspect_fd();
+#endif
 
     /* Re-open the temp file occasionally */
     if ((now = speedy_util_time()) - last_reopen > OPTVAL_RESTATTIMEOUT) {
@@ -168,8 +180,7 @@ static void file_lock() {
 
 	/* Initialize our copy of the create-time if necessary */
 	if (!file_create_time.tv_sec || cur_state < FS_HAVESLOTS) {
-	    file_create_time.tv_sec  = FILE_HEAD.create_time.tv_sec;
-	    file_create_time.tv_usec = FILE_HEAD.create_time.tv_usec;
+	    file_create_time = FILE_HEAD.create_time;
 	}
 	/* Check whether this file is a different version  */
 	else if ((file_create_time.tv_sec  != FILE_HEAD.create_time.tv_sec ||
@@ -203,10 +214,6 @@ static void file_lock() {
     file_locked = 1;
 }
 
-void speedy_file_fd_is_suspect() {
-    fd_is_suspect = 1;
-}
-
 static void file_close() {
     /* If no groups left, remove the file */
     if (cur_state >= FS_HAVESLOTS) {
@@ -224,7 +231,7 @@ int speedy_file_size() {
     return maplen;
 }
 
-void speedy_file_set_state(int new_state) {
+static void switch_state(int new_state) {
     switch(new_state) {
     case FS_CLOSED:
 	file_close();
@@ -236,17 +243,27 @@ void speedy_file_set_state(int new_state) {
 	file_unlock();
 	break;
     case FS_LOCKED:
-	file_lock();
+	if (!file_locked)
+	    file_lock();
 	FILE_HEAD.file_corrupt = 0;
 	break;
     case FS_WRITING:
-	file_lock();
+	if (!file_locked)
+	    file_lock();
 	FILE_HEAD.file_corrupt = 1;
 	break;
     }
+}
+
+SPEEDY_INLINE void speedy_file_set_state(int new_state) {
+    if (new_state == cur_state)
+	return;
+    switch_state(new_state);
     cur_state = new_state;
 }
 
+#ifdef SPEEDY_BACKEND
 void speedy_file_need_reopen() {
     last_reopen = 0;
 }
+#endif

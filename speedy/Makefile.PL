@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -20,17 +20,15 @@
 
 package SpeedyMake::speedy;
 
-require '../src/SpeedyMake.pm';
+require '../src/SpeedyMake.pl';
 @ISA = 'SpeedyMake';
 
 sub my_name {'speedy'}
 sub my_name_full {'speedy'}
 sub src_files_extra {'cb'}
 
-sub get_ldopts {
-    my $x = shift->SUPER::get_ldopts;
-    $x =~ s/\s*-lperl\s*/ /g;
-    return $x;
+sub remove_libs { my $class = shift;
+    '../util/remove_libs';
 }
 
 SpeedyMake::speedy->init->write_makefile;

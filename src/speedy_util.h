@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,20 +20,52 @@
 /* Implementing DIE_QUIET as a macro was problematic, so now it's a function. */
 #define DIE_QUIET speedy_util_die_quiet
 
-int speedy_util_pref_fd(int oldfd, int newfd);
-int speedy_util_geteuid();
+typedef struct {
+    void	*addr;
+    int		maplen;
+    int		is_mmaped;
+} SpeedyMapInfo;
+
+SPEEDY_INLINE int speedy_util_pref_fd(int oldfd, int newfd);
+SPEEDY_INLINE int speedy_util_getuid();
+SPEEDY_INLINE int speedy_util_geteuid();
 int speedy_util_seteuid(int id);
-int speedy_util_getuid();
 int speedy_util_argc(const char * const * argv);
-int speedy_util_getpid();
+SPEEDY_INLINE int speedy_util_getpid();
 void speedy_util_die(const char *fmt, ...);
 void speedy_util_die_quiet(const char *fmt, ...);
-int speedy_util_kill(pid_t pid, int sig);
 int speedy_util_execvp(const char *filename, const char *const *argv);
 char *speedy_util_strndup(const char *s, int len);
-time_t speedy_util_time();
-void speedy_util_gettimeofday(struct timeval *tv);
-void speedy_util_time_invalidate();
+SPEEDY_INLINE int speedy_util_time();
+SPEEDY_INLINE void speedy_util_gettimeofday(struct timeval *tv);
+SPEEDY_INLINE void speedy_util_time_invalidate();
 char *speedy_util_fname(int num, char type);
+void *speedy_util_bsearch(
+    const void *key, const void *base, size_t nmemb, size_t size,
+    int (*compar)(const void *, const void *), void **next
+);
+char *speedy_util_getcwd();
+SpeedyMapInfo *speedy_util_mapin(int fd, int max_size, int file_size);
+void speedy_util_mapout(SpeedyMapInfo *mi);
+SPEEDY_INLINE SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf);
+SPEEDY_INLINE int speedy_util_open_stat(const char *path, struct stat *stbuf);
+void speedy_util_exit(int status, int underbar_exit);
 
 #define speedy_util_strdup(s) speedy_util_strndup(s, strlen(s))
+#define speedy_util_kill(pid,sig) \
+    (((pid) && (pid) != speedy_util_getpid()) ? kill((pid), (sig)) : 0)
+
+#define PREF_FD_DONTCARE	-1
+
+/* Preferred file descriptors */
+
+#ifdef SPEEDY_BACKEND
+#define PREF_FD_ACCEPT_I	0
+#define PREF_FD_ACCEPT_O	1
+#define PREF_FD_ACCEPT_E	2
+#define PREF_FD_FILE		17
+#define PREF_FD_LISTENER	18
+#define PREF_FD_CWD		19
+#else
+#define PREF_FD_FILE		PREF_FD_DONTCARE
+#endif

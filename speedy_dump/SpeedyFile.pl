@@ -10,7 +10,7 @@ sub new { my($class, $fname) = @_;
 
 sub fname { my $self = shift;
     $self->{fname} ||=
-	sprintf('%s.2.%x.F', ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
+	sprintf('%s.3.%x.F', ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
 }
 
 sub data { my $self = shift;
@@ -36,7 +36,7 @@ sub file_head {
     shift->get_struct('_file_head', 0);
 }
 
-my $slot_size = &_grnm_slot'sizeof('name');
+my $slot_size = &_dummy_slot'sizeof('slot_size');
 my $slots_offset = $_file'offsetof[&_file'slots];
 
 sub slot { my($self, $slotnum, $type) = @_;

@@ -1,19 +1,21 @@
 
 use strict;
 use ExtUtils::MakeMaker;
-use lib 'src';
-use SpeedyMake qw(%write_makefile_common);
+BEGIN {
+    require 'src/SpeedyMake.pl';
+    import SpeedyMake qw(%write_makefile_common);
+}
 
 WriteMakefile(
     NAME		=> 'CGI::SpeedyCGI',
-    VERSION_FROM	=> 'src/SpeedyCGI_src.pm',
+    VERSION_FROM	=> 'src/SpeedyCGI.src',
     EXE_FILES		=> [qw(speedy/speedy speedy_backend/speedy_backend)],
     CONFIGURE		=> \&get_dir,
     PM			=> {'src/SpeedyCGI.pm'=>'$(INST_LIBDIR)/SpeedyCGI.pm'},
     MAN1PODS		=> {},
     MAN3PODS		=> {},
     dist		=> {DIST_DEFAULT => 'mydist'},
-    realclean		=> {FILES => 'README README.html'},
+    realclean		=> {FILES => 'README README.html lib'},
     %write_makefile_common
 );
 
@@ -52,20 +54,40 @@ sub postamble {
 	$extra .= "\ninstall ::\n\tcd mod_speedycgi; make install\n\n";
     }
 '
-mydist: README README.html tardist
+mydist: README README.html lib/CGI/SpeedyCGI.pm tardist
 
 README: src/SpeedyCGI.pm
-	(cd src; perl -e "use Pod::Text; pod2text(\"-80\")" < SpeedyCGI.pm >../README)
+	(cd src; $(PERL) -e "use Pod::Text; pod2text(\"-80\")" < SpeedyCGI.pm >../README)
 	chmod -R u+w,go-w,go+r .
 
 README.html: src/SpeedyCGI.pm
 	(cd src; pod2html SpeedyCGI.pm >../README.html; rm -f pod2html*)
 
-rpm: install README README.html
-	./util/build_rpms $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
+lib/CGI/SpeedyCGI.pm: src/SpeedyCGI.pm
+	test -d lib || mkdir lib
+	test -d lib/CGI || mkdir lib/CGI
+	cp src/SpeedyCGI.pm lib/CGI/SpeedyCGI.pm
 
-clean ::
-	rm -f *.rpm
+MAKE_INDEX = $(PERL) -w ./util/build_index $(VERSION)
+
+rpm: README README.html
+	./util/build_rpms $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
+	$(MAKE_INDEX)
+
+rpms: rpm
+
+solpkg: 
+	./util/build_solpkg $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
+	$(MAKE_INDEX)
+
+sunpkg: solpkg
+
+bsdpkg:
+	./util/build_bsdpkg $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
+	$(MAKE_INDEX)
+
+index:
+	$(MAKE_INDEX)
 
 ' . $extra;
 }

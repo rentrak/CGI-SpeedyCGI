@@ -1,0 +1,77 @@
+#!/usr/bin/perl
+#
+# Build an index.html file for the binaries directory
+#
+
+use strict;
+use CGI qw(:html);
+use vars qw($VERSION $title %info);
+
+open(STDIN, '</dev/null');
+
+chdir("binaries");
+
+$VERSION = shift(@ARGV);
+
+$title = "Binaries for SpeedyCGI version $VERSION";
+
+sub grab_vals { my $f = shift;
+    my %ret;
+    open(F, $f) || die "${f}: $!\n";
+    while (<F>) {
+	chop;
+	my($key,$val) = split(/=/, $_, 2);
+	if ($key eq 'DEPEND') {
+	    push(@{$ret{$key}}, $val);
+	} else {
+	    $ret{$key} = $val;
+	}
+    }
+    close(F);
+    return \%ret;
+}
+
+foreach my $f (<*.desc>) {
+    $f =~ s/.desc$//;
+    $info{$f} = &grab_vals("${f}.desc");
+}
+
+open(F, '>index.html') || die "index.html: $!\n";
+select F;
+print
+    start_html(-title=>$title),
+    center(
+	h1($title),
+	table({-border=>1},
+	    Tr(
+		th([
+		    'Operating System',
+		    'Architecture',
+		    'Package',
+		    'Dependencies',
+		    '&nbsp;',
+		]),
+	    ),
+	    map {
+		my $v = $info{$_};
+		Tr(
+		    td([
+			$v->{OS},
+			$v->{ARCH},
+			$v->{IS_APACHE}
+			    ? 'Optional Apache Module'
+			    : 'Basic Distribution',
+			join('<br>',
+			    ($v->{IS_APACHE} ? 'Basic Distribution' : ()),
+			    @{$v->{DEPEND} || []},
+			) || '&nbsp;',
+			a({-href=>$_}, 'Download'),
+		    ]),
+		);
+	    } sort {
+		$info{$a}{OS}.$info{$a}{ARCH}.$info{$a}{IS_APACHE} cmp
+		$info{$b}{OS}.$info{$b}{ARCH}.$info{$b}{IS_APACHE}
+	    } keys %info
+	),
+    ),
+;

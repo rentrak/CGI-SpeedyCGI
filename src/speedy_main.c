@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -24,29 +24,52 @@
 #include "speedy.h"
 
 #define NUMFDS	3
+#define CB_IN	(cb[0])
+#define CB_OUT	(cb[1])
+#define CB_ERR	(cb[2])
 
-static const int file_flags[NUMFDS] = {O_RDONLY, O_WRONLY, O_WRONLY};
+#define MY_COPYDONE(b) \
+    (COPYDONE(b) && (got_stdout || &(b) != &CB_OUT || BUF_EOF(b)))
+#define MY_CANREAD(b) \
+    (CANREAD(b) || (!got_stdout && &(b) == &CB_OUT && !BUF_EOF(b)))
 
-int main(int argc, char **argv, char **_junk) {
+static const int fd_flags[NUMFDS] = {O_RDONLY, O_WRONLY, O_WRONLY};
+
+static void die_on_sigpipe() {
+    signal(SIGPIPE, SIG_DFL);
+    speedy_util_kill(getpid(), SIGPIPE);
+    speedy_util_exit(1,0);
+}
+
+/*
+ * When profiling, only call speedy_opt_init once
+ */
+#ifdef SPEEDY_PROFILING
+static int did_opt_init, profile_runs;
+#define DO_OPT_INIT if (!did_opt_init++) speedy_opt_init
+#else
+#define DO_OPT_INIT speedy_opt_init
+#endif
+
+static void doit(const char * const *argv)
+{
     extern char **environ;
     PollInfo pi;
     char *ibuf_buf;
-    int env_sz, ibuf_sz, did_shutdown, i;
-    int s, e, is_open[NUMFDS];
-    CopyBuf ibuf, obuf, ebuf, *cbs[NUMFDS];
-    cbs[0] = &ibuf; cbs[1] = &obuf; cbs[2] = &ebuf;
+    int env_sz, ibuf_sz, did_shutdown, i, got_stdout = 0;
+    int s, e, fd_open[NUMFDS], cb_closed[NUMFDS];
+    CopyBuf cb[NUMFDS];
 
     signal(SIGPIPE, SIG_IGN);
 
     /* Find out if fd's 0-2 are open.  Also make them non-blocking */
     for (i = 0; i < NUMFDS; ++i) {
-	is_open[i] =
-	    fcntl(i, F_SETFL, file_flags[i] | O_NONBLOCK) != -1 ||
-	    errno != EBADF;
+	fd_open[i] =
+	    fcntl(i, F_SETFL, fd_flags[i] | O_NONBLOCK) != -1 || errno != EBADF;
     }
 
     /* Initialize options */
-    speedy_opt_init((const char * const *)argv, (const char * const *)environ);
+    DO_OPT_INIT(argv, (const char * const *)environ);
 
 #   ifdef IAMSUID
 	if (speedy_util_geteuid() == 0) {
@@ -71,6 +94,13 @@ int main(int argc, char **argv, char **_junk) {
 	}
 #   endif
 
+    /* Create buffer with env/argv data to send */
+    ibuf_buf = speedy_frontend_mkenv(
+	(const char * const *)environ, speedy_opt_script_argv(),
+	OPTVAL_BUFSIZPOST, 512,
+	&env_sz, &ibuf_sz, 0
+    );
+
     /* Connect up with a backend */
     speedy_frontend_connect(&s, &e);
 
@@ -78,74 +108,80 @@ int main(int argc, char **argv, char **_junk) {
     fcntl(e, F_SETFL, O_RDWR|O_NONBLOCK);
     fcntl(s, F_SETFL, O_RDWR|O_NONBLOCK);
 
-    /* Create buffer with env/argv data to send */
-    ibuf_buf = speedy_frontend_mkenv(
-	(const char * const *)environ, speedy_opt_script_argv(),
-	OPTVAL_BUFSIZPOST, 512,
-	&env_sz, &ibuf_sz
-    );
-
-    speedy_poll_init(&pi, max(s,e));
-
     /* Allocate buffers for copying below: */
-    /*	fd0 -> ibuf -> s	*/
-    /*	s   -> obuf -> fd1	*/
-    /*	e   -> ebuf -> fd2	*/
+    /*	fd0 -> cb[0] -> s	*/
+    /*	s   -> cb[1] -> fd1	*/
+    /*	e   -> cb[2] -> fd2	*/
     speedy_cb_alloc(
-	&ibuf,
+	&CB_IN,
 	ibuf_sz,
-	is_open[0] ? 0 : -1,
+	0,
 	s,
 	ibuf_buf,
 	env_sz
     );
     speedy_cb_alloc(
-	&obuf,
+	&CB_OUT,
 	OPTVAL_BUFSIZGET,
 	s,
-	is_open[1] ? 1 : -1,
+	1,
 	NULL,
 	0
     );
     speedy_cb_alloc(
-	&ebuf,
+	&CB_ERR,
 	512,
 	e,
-	is_open[2] ? 2 : -1,
+	2,
 	NULL,
 	0
     );
 
-    /* Poll/select may not wakeup on intial eof, so set for initial read
+    /* Disable i/o on any fd's that are not open */
+    if (!fd_open[0])
+	BUF_SETEOF(CB_IN);
+    if (!fd_open[1])
+	BUF_SET_WRITE_ERR(CB_OUT, EBADF);
+    if (!fd_open[2])
+	BUF_SET_WRITE_ERR(CB_ERR, EBADF);
+
+    /* Poll/select may not wakeup on intial eof, so set for initial read here.
      * (this is tested in initial_eof test #1)
-     * Also, set eof for files that are not open
      */
+    speedy_poll_init(&pi, max(s,e));
     speedy_poll_reset(&pi);
     for (i = 0; i < NUMFDS; ++i) {
-	if (is_open[i])
-	    speedy_poll_set(&pi, cbs[i]->rdfd, SPEEDY_POLLIN);
-	else
-	    BUF_SETEOF(*(cbs[i]));
+	if (MY_CANREAD(cb[i]))
+	    speedy_poll_set(&pi, cb[i].rdfd, SPEEDY_POLLIN);
     }
 
     /* Try to write our env/argv without dropping into select */
-    speedy_poll_set(&pi, cbs[0]->wrfd, SPEEDY_POLLOUT);
+    if (CANWRITE(CB_IN))
+	speedy_poll_set(&pi, CB_IN.wrfd, SPEEDY_POLLOUT);
+
+    for (i = 0; i < NUMFDS; ++i)
+	cb_closed[i] = 0;
 
     /* Copy streams */
     for (did_shutdown = 0;;) {
 
 	/* Do reads/writes */
 	for (i = 0; i < NUMFDS; ++i) {
-	    CopyBuf *b = cbs[i];
-	    int do_read  = CANREAD(*b) &&
-	                   speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN);
+	    CopyBuf *b = cb + i;
+	    int do_read  = MY_CANREAD(*b) &&
+			   speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN);
 	    int do_write = CANWRITE(*b) &&
-	                   speedy_poll_isset(&pi, b->wrfd, SPEEDY_POLLOUT);
+			   speedy_poll_isset(&pi, b->wrfd, SPEEDY_POLLOUT);
 
 	    while (do_read || do_write) {
+
 		if (do_read) {
 		    int sz = BUF_SZ(*b);
 		    speedy_cb_read(b);
+		    if (!got_stdout && b == &CB_OUT && BUF_SZ(*b) > sz) {
+			got_stdout = 1;
+			speedy_frontend_proto2(e, speedy_cb_shift(b));
+		    }
 		    if (CANWRITE(*b) && (BUF_EOF(*b) || BUF_SZ(*b) > sz))
 			do_write = 1;
 		    do_read = 0;
@@ -158,58 +194,84 @@ int main(int argc, char **argv, char **_junk) {
 		if (do_write) {
 		    int sz = BUF_SZ(*b);
 		    speedy_cb_write(b);
-		    if (CANREAD(*b) && BUF_SZ(*b) < sz)
+
+		    /* We should die on EPIPE's, but only for stdout/stderr */
+		    if (i > 0 && BUF_GET_WRITE_ERR(*b) == EPIPE)
+			die_on_sigpipe();
+
+		    if (MY_CANREAD(*b) && BUF_SZ(*b) < sz)
 			do_read = 1;
 		    do_write = 0;
 		}
 
-		/* See if we should shutdown the CGI's stdin. */
-		if (!did_shutdown && COPYDONE(ibuf)) {
-		    shutdown(s, 1);
-		    did_shutdown = 1;
+		/* Do closes now instead of later, so we have another
+		 * chance to read/write before dropping into select.
+		 */
+		if (!cb_closed[i] && MY_COPYDONE(*b)) {
+		    cb_closed[i] = 1;
+
+		    if (fd_open[i]) {
+			fcntl(i, F_SETFL, fd_flags[i]);
+#ifndef SPEEDY_PROFILING
+			close(i);
+#endif
+			fd_open[i] = 0;
+		    }
+		    if (b == &CB_IN)
+			shutdown(CB_IN.wrfd, 1);
 		}
 	    }
 	}
-	
-	if (COPYDONE(obuf) && COPYDONE(ebuf))
+
+	if (MY_COPYDONE(CB_OUT) && MY_COPYDONE(CB_ERR))
 	    break;
 
 	/* Reset events */
 	speedy_poll_reset(&pi);
-	
+
 	/* Set read/write events */
 	for (i = 0; i < NUMFDS; ++i) {
-	    CopyBuf *b = cbs[i];
-	    if ( CANREAD(*b)) speedy_poll_set(&pi, b->rdfd, SPEEDY_POLLIN);
-	    if (CANWRITE(*b)) speedy_poll_set(&pi, b->wrfd, SPEEDY_POLLOUT);
+	    CopyBuf *b = cb + i;
+	    if (MY_CANREAD(*b))
+		speedy_poll_set(&pi, b->rdfd, SPEEDY_POLLIN);
+	    if (CANWRITE(*b))
+		speedy_poll_set(&pi, b->wrfd, SPEEDY_POLLOUT);
 	}
 
 	/* Poll... */
 	if (speedy_poll_wait(&pi, -1) == -1)
 	    speedy_util_die("poll");
-	speedy_util_time_invalidate();
     }
 
     /* SGI's /dev/tty goes crazy unless we turn of non-blocking I/O. */
     for (i = 0; i < NUMFDS; ++i) {
-	if (is_open[i])
-	    fcntl(i, F_SETFL, file_flags[i]);
+	if (fd_open[i])
+	    fcntl(i, F_SETFL, fd_flags[i]);
     }
 
+#ifdef SPEEDY_PROFILING
+    if (profile_runs) {
+	close(s);
+	close(e);
+	speedy_poll_free(&pi);
+	speedy_cb_free(&CB_IN);
+	speedy_cb_free(&CB_OUT);
+	speedy_cb_free(&CB_ERR);
+	return;
+    }
+#endif
     /* Slightly faster to just exit now instead of cleaning up */
-    _exit(0);
+    speedy_util_exit(0,1);
+}
 
-    /* Here's what would need to be done if we cleaned up properly */
-    /*NOTREACHED*/
-    close(1);
-    close(2);
-    close(0);
-    close(s);
-    close(e);
-    speedy_poll_free(&pi);
-    speedy_cb_free(&ibuf);
-    speedy_cb_free(&obuf);
-    speedy_cb_free(&ebuf);
+int main(int argc, char **argv, char **_junk) {
+#ifdef SPEEDY_PROFILING
+    char *runs = getenv("SPEEDY_PROFILE_RUNS");
+    profile_runs = runs ? atoi(runs) : 1;
+    while (profile_runs--)
+#endif
+	doit((const char * const *)argv);
+    return 0;
 }
 
 /*
@@ -218,5 +280,5 @@ int main(int argc, char **argv, char **_junk) {
 
 void speedy_abort(const char *s) {
     write(2, s, strlen(s));
-    exit(1);
+    speedy_util_exit(1, 0);
 }

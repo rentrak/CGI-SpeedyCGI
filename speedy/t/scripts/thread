@@ -1,0 +1,21 @@
+# Simple test of threaded perl
+
+use strict;
+use Config;
+
+unless ($Config{usethreads}) {
+    print "no-threads\n";
+    exit;
+}
+
+require Thread;
+
+sub sub1 {
+    print "x\n";
+}
+
+my $thr1 = Thread->new(\&sub1);
+my $thr2 = Thread->new(\&sub1);
+
+$thr1->join;
+$thr2->join;

@@ -13,16 +13,16 @@ print "1..$max\n";
 for (my $j = 0; $j < 2; ++$j) {
     foreach my $redirect (@redirects) {
 	open(F, "| $ENV{SPEEDY} t/scripts/stdio $redirect");
-	for (my $i = 0; $i < $num; ++$i) {
+	for (my $i = 1; $i < $num; ++$i) {
 	    print F "$i\n";
 	}
 	close(F);
 
 	my $ok = 1;
 	open(F, "<$tmp");
-	for (my $i = 0; $i < $num; ++$i) {
+	for (my $i = 1; $i < $num; ++$i) {
 	    $_ = <F>;
-	    ## print STDERR "got $_\n";
+	    #print "Got: $_";
 	    if ($_ != $i) {
 		$ok = 0; last;
 	    }

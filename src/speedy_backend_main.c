@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -87,13 +87,13 @@ int main(int argc, char **argv, char **_junk) {
  * Glue Functions
  */
 
-void *speedy_malloc(int n) {
+SPEEDY_INLINE void *speedy_malloc(size_t size) {
     void *s;
-    New(123,s,n,char);
+    New(123,s,size,char);
     return s;
 }
 
-void *speedy_realloc(void *ptr, size_t size) {
+SPEEDY_INLINE void *speedy_realloc(void *ptr, size_t size) {
     Renew(ptr, size, char);
     return ptr;
 }

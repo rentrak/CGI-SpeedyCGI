@@ -17,3 +17,5 @@ print $line =~ /ok/ ? "ok\n" : "failed\n";
 alarm(3);
 $line = `$ENV{SPEEDY} t/scripts/initial_eof <t/scripts/initial_eof >/dev/null`;
 print $? ? "failed\n" : "ok\n";
+
+alarm(0);

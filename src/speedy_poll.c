@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -56,7 +56,7 @@ void speedy_poll_set(PollInfo *pi, int fd, int flags) {
     pfd->revents |= flags;
 }
 
-int speedy_poll_wait(PollInfo *pi, int msecs) {
+static int poll_wait(PollInfo *pi, int msecs) {
     return poll(pi->fds, pi->numfds, msecs);
 }
 
@@ -84,15 +84,15 @@ void speedy_poll_reset(PollInfo *pi) {
 }
 
 void speedy_poll_set(PollInfo *pi, int fd, int flags) {
-    int i;
-    for (i = 0; i < 2; ++i) {
-	if (flags & (1<<i)) {
-	    FD_SET(fd, pi->fdset + i);
-	}
+    if (flags & (1<<0)) {
+	FD_SET(fd, pi->fdset + 0);
+    }
+    if (flags & (1<<1)) {
+	FD_SET(fd, pi->fdset + 1);
     }
 }
 
-int speedy_poll_wait(PollInfo *pi, int msecs) {
+static int poll_wait(PollInfo *pi, int msecs) {
     struct timeval tv, *tvp;
     if (msecs == -1) {
 	tvp = NULL;
@@ -105,13 +105,33 @@ int speedy_poll_wait(PollInfo *pi, int msecs) {
 }
 
 int speedy_poll_isset(const PollInfo *pi, int fd, int flag) {
-    int i;
-    for (i = 0; i < 2; ++i) {
-	if (flag & (1<<i)) {
-	    return FD_ISSET(fd, pi->fdset + i);
-	}
+    if (flag & (1<<0)) {
+	return FD_ISSET(fd, pi->fdset + 0);
+    }
+    if (flag & (1<<1)) {
+	return FD_ISSET(fd, pi->fdset + 1);
     }
     return 0;
 }
 
 #endif
+
+/*
+ * Common Section
+ */
+
+int speedy_poll_wait(PollInfo *pi, int msecs) {
+    int retval;
+
+    do {
+	retval = poll_wait(pi, msecs);
+    } while (retval == -1 && errno == EINTR);
+    speedy_util_time_invalidate();
+    return retval;
+}
+
+int speedy_poll_quickwait(PollInfo *pi, int fd, int flags, int msecs) {
+    speedy_poll_reset(pi);
+    speedy_poll_set(pi, fd, flags);
+    return speedy_poll_wait(pi, msecs);
+}

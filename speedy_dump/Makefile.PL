@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -22,7 +22,7 @@ use strict;
 
 package SpeedyMake::speedy_dump;
 
-require '../src/SpeedyMake.pm';
+require '../src/SpeedyMake.pl';
 use vars qw(@ISA);
 @ISA = 'SpeedyMake';
 
@@ -42,7 +42,11 @@ sub structs { my $class = shift;
 	    while (<F>) {
 		chop;
 		@_ = split;
-		push(@list, $_[2]) if ($_[1] eq 'struct' || $_[1] eq 'union');
+		if ($_[0] eq 'typedef' && $_[2] =~ /^\w/ &&
+		    ($_[1] eq 'struct' || $_[1] eq 'union' || $_[1] eq 'char'))
+		{
+		    push(@list, $_[2]);
+		}
 	    }
 	    close(F);
 	}

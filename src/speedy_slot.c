@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -68,12 +68,10 @@ void speedy_slot_free(slotnum_t slotnum) {
 }
 
 slotnum_t speedy_slot_check(slotnum_t slotnum) {
-    if (slotnum > FILE_HEAD.slots_alloced) {
+    if (BAD_SLOTNUM(slotnum)) {
 	DIE_QUIET("slotnum %d out of range, only %d alloced",
 	    slotnum, FILE_HEAD.slots_alloced
 	);
     }
     return slotnum;
 }
-
-

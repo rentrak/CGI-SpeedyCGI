@@ -6,7 +6,7 @@ status=0
 for f in $files; do
     bad=`
 	nm $f |
-	awk '$3 !~ /^speedy/ && $3 != "main" && $3 != "xs_init" && ($2 == "T" || $2 == "C" || $2 == "D") {
+	awk '$3 !~ /^_*speedy/ && $3 !~ /^_*main$/ && $3 !~ /^_*xs_init$/ && ($2 == "T" || $2 == "C" || $2 == "D" || $2 == "B") {
 	    print $3;
 	}'
     `

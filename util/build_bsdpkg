@@ -1,0 +1,77 @@
+#!/bin/sh -u
+
+#
+# Build bsd package.  See "man pkg_create" for help
+#
+
+umask 022
+
+# Common code and variables
+. util/build_common
+
+name=${PKGNM}-$VERSION
+apache_name=${PKGNM}_${MODNM}-$VERSION
+os=`uname -s`-`uname -r | sed 's/-RELEASE$//'`
+arch=`uname -m`
+
+run_pkg_create() {
+    is_apache=$1;	shift
+    nm=$1;		shift
+    create_args=$1;	shift
+    o=binaries/${os}-${nm}
+    pkg_create \
+	-f $TMPDIR/pkg-plist \
+	-c $TMPDIR/pkg-comment \
+	-d $TMPDIR/pkg-descr \
+	-D COPYING \
+	$create_args \
+	$o &&
+    add_desc ${o}.tgz $is_apache $os $arch "$@"
+}
+
+#
+# Standard package
+#
+
+# Write description file
+grab_description >$TMPDIR/pkg-descr
+
+# Write comment file
+grab_summary >$TMPDIR/pkg-comment
+
+# Write the packing list file
+(
+    cat <<-END
+	@name $name
+	@cwd $PREFIX
+	END
+
+    # Insert the file names
+    for f in $STD_FILES; do echo $f; done | remove_prefix
+) >$TMPDIR/pkg-plist
+
+run_pkg_create 0 $name ""
+if test $? -ne 0; then
+    adios 1;
+fi
+
+#
+# Apache module
+#
+
+echo $APACHE_DESC >$TMPDIR/pkg-descr
+echo $APACHE_DESC >$TMPDIR/pkg-comment
+(
+    cat <<-END
+	@name $apache_name
+	@cwd $PREFIX
+	@pkgdep $name
+	END
+
+    echo $MODULE | remove_prefix
+) >$TMPDIR/pkg-plist
+apache_install_script '$PKG_PREFIX' 'bak' >$TMPDIR/install
+apache_uninstall_script >$TMPDIR/uninstall
+
+run_pkg_create 1 $apache_name \
+    "-I $TMPDIR/install -K $TMPDIR/uninstall" "Apache Web Server"

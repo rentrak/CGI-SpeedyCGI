@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2000  Daemon Consulting Inc.
+ * Copyright (C) 2001  Daemon Consulting Inc.
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -28,11 +28,11 @@ typedef struct _file_head {
 
 typedef struct _file {
     file_head_t		file_head;
-    slot_t		slots[1];
+    slot_t		slots[MAX_SLOTS];
 } speedy_file_t;
 
 #define FILE_ALLOC_CHUNK	512
-#define FILE_REV		2
+#define FILE_REV		3
 #define FILE_HEAD		(speedy_file_maddr->file_head)
 #define FILE_SLOTS		(speedy_file_maddr->slots)
 #define FILE_SLOT(member, n)	(FILE_SLOTS[SLOT_CHECK(n)-1].member)
@@ -46,12 +46,8 @@ typedef struct _file {
 #define FS_LOCKED	3	/* Locked, mmaped, read-only */
 #define FS_WRITING	4	/* Locked, mmaped, writing to file */
 
-#ifndef PREF_FD_FILE
-#   define PREF_FD_FILE -1
-#endif
-
 extern speedy_file_t *speedy_file_maddr;
-void speedy_file_fd_is_suspect();
+SPEEDY_INLINE void speedy_file_fd_is_suspect();
 int speedy_file_size();
-void speedy_file_set_state(int new_state);
+SPEEDY_INLINE void speedy_file_set_state(int new_state);
 void speedy_file_need_reopen();

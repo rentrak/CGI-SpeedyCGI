@@ -2,7 +2,7 @@
 # Generate C-code and documentation from the optdefs file
 #
 #
-# Copyright (C) 2000  Daemon Consulting Inc.
+# Copyright (C) 2001  Daemon Consulting Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -24,19 +24,18 @@ use strict;
 use Text::Wrap qw(wrap $columns);
 
 my %context = (
-    mod_speedycgi	=>1,
-    speedy		=>1,
-    module		=>1,
-    all			=>[qw(mod_speedycgi speedy module)],
-    frontend		=>[qw(speedy mod_speedycgi)],
+    'mod_speedycgi'	=>1,
+    'speedy'		=>1,
+    'module'		=>1,
+    'all'		=>[qw(mod_speedycgi speedy module)],
+    'frontend'		=>[qw(speedy mod_speedycgi)],
 );
 
 my %ctype = (
-    whole	=>'int',
-    natural	=>'int',
-    int		=>'int',
-    toggle	=>'int',
-    str		=>'char*',
+    'whole'	=>'int',
+    'natural'	=>'int',
+    'toggle'	=>'int',
+    'str'	=>'char*',
 );
 my @type = sort keys %ctype;
 
@@ -147,8 +146,12 @@ for (my $i = 0; $i <= $#options; ++$i) {
     }
 }
 print "    default: var = -1; break;}\n\n";
-    
 
+
+sub quote { my $x = shift;
+    $x =~ s/"/\\"/g;
+    return $x;
+}
 
 #
 # Write mod_speedycgi_cmds.c
@@ -161,7 +164,7 @@ for (my $i = 0; $i <= $#options; ++$i) {
     next unless $opt->{context} && $opt->{context}{mod_speedycgi};
 
     printf "    {\n\t\"Speedy%s\", set_option, (void*)(speedy_optdefs + %d), OR_ALL, TAKE1,\n\t\"%s\"\n    },\n",
-	$opt->{option}, $i, $opt->{desc};
+	$opt->{option}, $i, &quote($opt->{desc});
 }
 print "{NULL}\n};\n";
 
@@ -169,7 +172,7 @@ print "{NULL}\n};\n";
 # Write SpeedyCGI.pm
 #
 &open_file('SpeedyCGI.pm', 1);
-open(I, '<SpeedyCGI_src.pm') || die "SpeedyCGI_src.pm: $!\n";
+open(I, '<SpeedyCGI.src') || die "SpeedyCGI.src: $!\n";
 $columns = 54; # For the wrap function
 while (<I>) {
     if (/INSERT_OPTIONS_POD_HERE/) {
@@ -179,16 +182,20 @@ while (<I>) {
 	    if ($opt->{letter}) {
 		my $arg = '';
 		if ($opt->{type} ne 'toggle') {
-		    $arg = $ctype{$opt->{type}} eq 'char*' ? 'str' : 'N'
+		    $arg = $ctype{$opt->{type}} eq 'char*' ? '<string>' : '<number>'
 		}
 		$cmdline = sprintf("-%s%s", $opt->{letter}, $arg);
 	    }
 	    printf "=item %s\n\n", $opt->{option};
 	    printf "    Command Line    : %s\n", $cmdline;
 	    if ($opt->{type} ne 'toggle') {
+		my $defval = defined($opt->{defval}) ? $opt->{defval} : '';
+		if ($ctype{$opt->{type}} eq 'char*') {
+		    $defval = "\"$defval\"";
+		}
 		printf "    Default Value   : %s%s\n",
-		   defined($opt->{defval}) ? $opt->{defval} : '',
-		   defined($opt->{defdesc}) ? " ($opt->{defdesc})" : '';
+		    $defval,
+		    defined($opt->{defdesc}) ? " ($opt->{defdesc})" : '';
 	    }
 	    printf "    Context         : %s\n",
 		join(', ', sort keys %{$opt->{context}});
