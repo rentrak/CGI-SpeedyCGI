@@ -22,7 +22,9 @@
 static struct timeval saved_time;
 static int my_euid = -1;
 
-static int change_fd(int oldfd, int newfd) {
+int speedy_util_pref_fd(int oldfd, int newfd) {
+    if (newfd == oldfd || newfd == PREF_FD_DONTCARE || oldfd == -1)
+	return oldfd;
     (void) dup2(oldfd, newfd);
     (void) close(oldfd);
     return newfd;
@@ -46,11 +48,6 @@ static void end_profiling(int dowrites) {
     }
 }
 #endif
-
-SPEEDY_INLINE int speedy_util_pref_fd(int oldfd, int newfd) {
-    return (newfd == PREF_FD_DONTCARE || oldfd == -1 || newfd == oldfd)
-	? oldfd : change_fd(oldfd, newfd);
-}
 
 SPEEDY_INLINE int speedy_util_geteuid() {
     if (my_euid == -1)
@@ -135,7 +132,8 @@ int speedy_util_execvp(const char *filename, const char *const *argv) {
 }
 
 char *speedy_util_strndup(const char *s, int len) {
-    char *buf = speedy_malloc(len+1);
+    char *buf;
+    speedy_new(buf, len+1, char);
     speedy_memcpy(buf, s, len);
     buf[len] = '\0';
     return buf;
@@ -158,8 +156,10 @@ SPEEDY_INLINE void speedy_util_time_invalidate() {
 }
 
 char *speedy_util_fname(int num, char type) {
-    char *fname = (char*) speedy_malloc(strlen(OPTVAL_TMPBASE) + 80);
+    char *fname;
     int uid = speedy_util_getuid(), my_euid = speedy_util_geteuid();
+
+    speedy_new(fname, strlen(OPTVAL_TMPBASE) + 80, char);
 
     if (my_euid == uid)
 	sprintf(fname, "%s.%x.%x.%c", OPTVAL_TMPBASE, num, my_euid, type);
@@ -177,7 +177,7 @@ char *speedy_util_getcwd() {
     /* size = 10; */
 
     while (1) {
-	buf = (char*) speedy_malloc(size);
+	speedy_new(buf, size, char);
 	cwd_ret = getcwd(buf, size);
 
 	/* TEST - simulate getcwd failure due to unreable directory */
@@ -225,14 +225,16 @@ static int readall(int fd, void *addr, int len) {
 
 SpeedyMapInfo *speedy_util_mapin(int fd, int max_size, int file_size)
 {
-    SpeedyMapInfo *mi = speedy_malloc(sizeof(SpeedyMapInfo));
+    SpeedyMapInfo *mi;
+    
+    speedy_new(mi, 1, SpeedyMapInfo);
 
     mi->maplen = max_size == -1 ? file_size : min(file_size, max_size);
     mi->addr = mmap(0, mi->maplen, PROT_READ, MAP_SHARED, fd, 0);
     mi->is_mmaped = (mi->addr != (void*)MAP_FAILED);
 
     if (!mi->is_mmaped) {
-	mi->addr = speedy_malloc(mi->maplen);
+	speedy_new(mi->addr, mi->maplen, char);
 	lseek(fd, 0, SEEK_SET);
 	mi->maplen = readall(fd, mi->addr, mi->maplen);
 	if (mi->maplen == -1) {

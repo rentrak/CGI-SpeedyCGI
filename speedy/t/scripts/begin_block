@@ -4,6 +4,7 @@
 
 use vars qw($i_am_speedy);
 BEGIN {
-    $i_am_speedy = eval {require CGI::SpeedyCGI} && CGI::SpeedyCGI->i_am_speedy;
+    $i_am_speedy = defined($CGI::SpeedyCGI::i_am_speedy) &&
+	eval {require CGI::SpeedyCGI} && CGI::SpeedyCGI->i_am_speedy;
 }
 print "$i_am_speedy";

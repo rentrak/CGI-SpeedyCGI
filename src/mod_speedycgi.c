@@ -135,6 +135,7 @@ static void cgi_init(server_rec *s, pool *p)
     speedy_opt_init(
 	(const char * const *)prog_argv, (const char * const *)environ
     );
+    speedy_opt_save();
 }
 
 /****************************************************************
@@ -153,6 +154,9 @@ static int cgi_handler(request_rec *r)
 
     /* May have been a while since we ran last */
     speedy_util_time_invalidate();
+
+    /* Restore our original option values */
+    speedy_opt_restore();
 
     /* Copy request_rec to global */
     global_r = r;
@@ -220,10 +224,20 @@ static int cgi_handler(request_rec *r)
     ap_bsetflag(r->connection->client, B_EBCDIC2ASCII, 1);
 #endif /*CHARSET_EBCDIC*/
 
-    /* Connect up to a speedycgi backend, creating a new one if necessary */
+    /* Set script filename */
     script_argv[0] = r->filename;
     script_argv[1] = NULL;
     speedy_opt_set_script_argv((const char * const *)script_argv);
+
+    /* Allocate argsbuffer and fill in with the env/argv data to send */
+    argsbuffer = speedy_frontend_mkenv(
+	(const char * const *)ap_create_environment(r->pool, r->subprocess_env),
+	(const char * const *)script_argv,
+	HUGE_STRING_LEN, 0,
+	&sendenv_size, &alloc_size, 1
+    );
+
+    /* Connect up to a speedycgi backend, creating a new one if necessary */
     speedy_frontend_connect(&s, &e);
 
     /*
@@ -238,14 +252,6 @@ static int cgi_handler(request_rec *r)
     script_err = ap_bcreate(r->pool, B_RD|B_SOCKET);
     ap_note_cleanups_for_fd(r->pool, e);
     ap_bpushfd(script_err, e, e);
-
-    /* Allocate argsbuffer and fill in with the env/argv data to send */
-    argsbuffer = speedy_frontend_mkenv(
-	(const char * const *)ap_create_environment(r->pool, r->subprocess_env),
-	(const char * const *)script_argv,
-	HUGE_STRING_LEN, 0,
-	&sendenv_size, &alloc_size, 1
-    );
 
     /* Send over env/argv data */
     ap_bwrite(script_io, argsbuffer, sendenv_size);

@@ -56,9 +56,10 @@ static void doit(const char * const *argv)
     extern char **environ;
     PollInfo pi;
     char *ibuf_buf;
-    int env_sz, ibuf_sz, did_shutdown, i, got_stdout = 0;
+    int env_sz, ibuf_sz, did_shutdown, got_stdout = 0;
     int s, e, fd_open[NUMFDS], cb_closed[NUMFDS];
     CopyBuf cb[NUMFDS];
+    register int i;
 
     signal(SIGPIPE, SIG_IGN);
 
@@ -167,7 +168,7 @@ static void doit(const char * const *argv)
 
 	/* Do reads/writes */
 	for (i = 0; i < NUMFDS; ++i) {
-	    CopyBuf *b = cb + i;
+	    register CopyBuf *b = cb + i;
 	    int do_read  = MY_CANREAD(*b) &&
 			   speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN);
 	    int do_write = CANWRITE(*b) &&

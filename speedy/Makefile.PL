@@ -24,7 +24,7 @@ require '../src/SpeedyMake.pl';
 @ISA = 'SpeedyMake';
 
 sub my_name {'speedy'}
-sub my_name_full {'speedy'}
+sub my_name_full {shift->my_name}
 sub src_files_extra {'cb'}
 
 sub remove_libs { my $class = shift;

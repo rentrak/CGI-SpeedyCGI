@@ -1,7 +1,7 @@
 <HTML>
 <HEAD>
 <TITLE>CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently</TITLE>
-<LINK REV="made" HREF="mailto:sam@angel.daemoninc.com">
+<LINK REV="made" HREF="mailto:root@porky.devel.redhat.com">
 </HEAD>
 
 <BODY>
@@ -33,9 +33,7 @@
 		<LI><A HREF="#Apache_Configuration">Apache Configuration</A>
 	</UL>
 
-	<LI><A HREF="#BUGS_TODO">BUGS / TODO</A>
 	<LI><A HREF="#FREQUENTLY_ASKED_QUESTIONS">FREQUENTLY ASKED QUESTIONS</A>
-	<LI><A HREF="#MAILING_LIST">MAILING LIST</A>
 	<LI><A HREF="#DOWNLOADING">DOWNLOADING</A>
 	<UL>
 
@@ -45,7 +43,18 @@
 
 	<LI><A HREF="#AUTHOR">AUTHOR</A>
 	<LI><A HREF="#SEE_ALSO">SEE ALSO</A>
-	<LI><A HREF="#TRANSLATIONS">TRANSLATIONS</A>
+	<LI><A HREF="#MORE_INFORMATION">MORE INFORMATION</A>
+	<UL>
+
+		<LI><A HREF="#SpeedyCGI_Home_Page">SpeedyCGI Home Page</A>
+		<LI><A HREF="#Mailing_List">Mailing List</A>
+		<LI><A HREF="#Bugs_and_Todo_List">Bugs and Todo List</A>
+		<LI><A HREF="#Japanese_Translation">Japanese Translation</A>
+		<LI><A HREF="#Benchmarks">Benchmarks</A>
+		<LI><A HREF="#Success_Stories">Success Stories</A>
+		<LI><A HREF="#Revision_History">Revision History</A>
+	</UL>
+
 	<LI><A HREF="#COPYRIGHT">COPYRIGHT</A>
 </UL>
 <!-- INDEX END -->
@@ -82,7 +91,7 @@ CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 </PRE>
 <P>
 <PRE> # Register a shutdown handler
- $sp-&gt;set_shutdown_handler(sub { do something here });
+ $sp-&gt;add_shutdown_handler(sub { do something here });
 </PRE>
 <P>
 <PRE> # Register a cleanup handler
@@ -171,7 +180,7 @@ environment variable named SPEEDY_TIMEOUT.
 
 </DL>
 <DL>
-<DT><STRONG><A NAME="item_CGI">CGI::SpeedyCGI</A></STRONG><DD>
+<DT><STRONG><A NAME="item_Module">Module</A></STRONG><DD>
 <P>
 The CGI::SpeedyCGI module provides the setopt method to set options from
 within the perl script at runtime. There is also a getopt method to
@@ -179,12 +188,12 @@ retrieve the current options. See <A HREF="#METHODS">METHODS</A> below.
 
 </DL>
 <DL>
-<DT><STRONG><A NAME="item_mod_speedycgi">mod_speedycgi</A></STRONG><DD>
+<DT><STRONG><A NAME="item_Apache">Apache</A></STRONG><DD>
 <P>
 If you are using the optional Apache module, SpeedyCGI options can be set
 in the <EM>httpd.conf</EM> file. The name of the apache directive will always be Speedy followed by
-the option name. For example to set the speedy Timeout option, use the
-apache directive SpeedyTimeout.
+the option name. For example to set the Timeout option, use the apache
+directive SpeedyTimeout.
 
 </DL>
 <P>
@@ -203,7 +212,7 @@ your script or from a shell prompt.
 
 </DL>
 <DL>
-<DT><STRONG>mod_speedycgi</STRONG><DD>
+<DT><STRONG><A NAME="item_mod_speedycgi">mod_speedycgi</A></STRONG><DD>
 <P>
 The optional Apache mod_speedycgi module.
 
@@ -222,7 +231,7 @@ methods.
 <DT><STRONG><A NAME="item_BackendProg">BackendProg</A></STRONG><DD>
 <P>
 <PRE>    Command Line    : -p&lt;string&gt;
-    Default Value   : &quot;/usr/bin/speedy_backend&quot;
+    Default Value   : &quot;/usr/local/bin/speedy_backend&quot;
     Context         : mod_speedycgi, speedy
 </PRE>
 <P>
@@ -241,8 +250,8 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use &lt;number&gt; bytes for the buffer that
-        receives data from the CGI script.
+<PRE>        Use &lt;number&gt; bytes for the buffer that receives data from
+        the CGI script.
 </PRE>
 <DT><STRONG><A NAME="item_BufsizPost">BufsizPost</A></STRONG><DD>
 <P>
@@ -254,8 +263,8 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use &lt;number&gt; bytes for the buffer that sends
-        data to the CGI script.
+<PRE>        Use &lt;number&gt; bytes for the buffer that sends data to the
+        CGI script.
 </PRE>
 <DT><STRONG><A NAME="item_Group">Group</A></STRONG><DD>
 <P>
@@ -267,21 +276,17 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Allow a single perl interpreter to run
-        multiple scripts. All scripts that are run
-        with the same group name and by the same user
-        will be run by the same group of perl
-        interpreters. If the group name is &quot;none&quot;
-        then grouping is disabled and each
-        interpreter will run one script. Different
-        group names allow scripts to be separated
-        into different groups. Name is
-        case-sensitive, and only the first
-        12-characters are significant. Specifying an
-        empty group name is the same as specifying
-        the group name &quot;default&quot; - this allows just
-        specifying &quot;-g&quot; on the command line to turn
-        on grouping.
+<PRE>        Allow a single perl interpreter to run multiple scripts.
+        All scripts that are run with the same group name and by
+        the same user will be run by the same group of perl
+        interpreters. If the group name is &quot;none&quot; then grouping is
+        disabled and each interpreter will run one script.
+        Different group names allow scripts to be separated into
+        different groups. Name is case-sensitive, and only the
+        first 12-characters are significant. Specifying an empty
+        group name is the same as specifying the group name
+        &quot;default&quot; - this allows just specifying &quot;-g&quot; on the command
+        line to turn on grouping.
 </PRE>
 <DT><STRONG><A NAME="item_MaxBackends">MaxBackends</A></STRONG><DD>
 <P>
@@ -293,9 +298,8 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        If non-zero, limits the number of speedy
-        backends running for this cgi script to
-        &lt;number&gt;.
+<PRE>        If non-zero, limits the number of speedy backends running
+        for this cgi script to &lt;number&gt;.
 </PRE>
 <DT><STRONG><A NAME="item_MaxRuns">MaxRuns</A></STRONG><DD>
 <P>
@@ -307,11 +311,10 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Once the perl interpreter has run &lt;number&gt;
-        times, re-exec the backend process.  Zero
-        indicates no maximum.  This option is useful
-        for processes that tend to consume resources
-        over time.
+<PRE>        Once the perl interpreter has run &lt;number&gt; times, re-exec
+        the backend process.  Zero indicates no maximum.  This
+        option is useful for processes that tend to consume
+        resources over time.
 </PRE>
 <DT><STRONG><A NAME="item_PerlArgs">PerlArgs</A></STRONG><DD>
 <P>
@@ -323,8 +326,7 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Command-line options to pass to the perl
-        interpreter.
+<PRE>        Command-line options to pass to the perl interpreter.
 </PRE>
 <DT><STRONG><A NAME="item_Timeout">Timeout</A></STRONG><DD>
 <P>
@@ -336,9 +338,9 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        If no new requests have been received after
-        &lt;number&gt; seconds, exit the persistent perl
-        interpreter.  Zero indicates no timeout.
+<PRE>        If no new requests have been received after &lt;number&gt;
+        seconds, exit the persistent perl interpreter.  Zero
+        indicates no timeout.
 </PRE>
 <DT><STRONG><A NAME="item_TmpBase">TmpBase</A></STRONG><DD>
 <P>
@@ -350,9 +352,8 @@ methods.
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use the given prefix for creating temporary
-        files.  This must be a filename prefix, not a
-        directory name.
+<PRE>        Use the given prefix for creating temporary files.  This
+        must be a filename prefix, not a directory name.
 </PRE>
 <DT><STRONG><A NAME="item_Version">Version</A></STRONG><DD>
 <P>
@@ -373,7 +374,7 @@ methods.
 The following methods are available in the CGI::SpeedyCGI module.
 
 <DL>
-<DT><STRONG><A NAME="item_new">new </A></STRONG><DD>
+<DT><STRONG><A NAME="item_new">new</A></STRONG><DD>
 <P>
 Create a new CGI::SpeedyCGI object.
 
@@ -391,11 +392,18 @@ it was registered.
 <P>
 <PRE>    $sp-&gt;register_cleanup(\&amp;cleanup_func);
 </PRE>
+<DT><STRONG><A NAME="item_add_shutdown_handler">add_shutdown_handler($function_ref)</A></STRONG><DD>
+<P>
+Add a function to the list of functions that will be called right before
+the perl interpreter exits. This is <STRONG>not</STRONG> at the end of each request, it is when the perl interpreter decides to exit
+completely due to a Timeout or reaching MaxRuns.
+
+<P>
+<PRE>    $sp-&gt;add_shutdown_handler(sub {$dbh-&gt;logout});
+</PRE>
 <DT><STRONG><A NAME="item_set_shutdown_handler">set_shutdown_handler($function_ref)</A></STRONG><DD>
 <P>
-Register a function that will be called right before the perl interpreter
-exits. This is <STRONG>not</STRONG> at the end of each request, it is when the perl interpreter decides to exit
-completely due to a Timeout or reaching MaxRuns.
+Deprecated. Similar to <A HREF="#item_add_shutdown_handler">add_shutdown_handler</A>, but only allows for a single function to be registered.
 
 <P>
 <PRE>    $sp-&gt;set_shutdown_handler(sub {$dbh-&gt;logout});
@@ -418,6 +426,13 @@ under SpeedyCGI:
 <PRE>    if (eval {require CGI::SpeedyCGI} &amp;&amp; CGI::SpeedyCGI-&gt;i_am_speedy) {
         Do something SpeedyCGI specific here...
 </PRE>
+<P>
+To increase the speed of this check you can also test whether the following
+variable is defined instead of going through the object interface:
+
+<P>
+<PRE>    $CGI::SpeedyCGI::i_am_speedy
+</PRE>
 <DT><STRONG><A NAME="item_setopt">setopt($optname, $value)</A></STRONG><DD>
 <P>
 Set one of the SpeedyCGI options given in <A HREF="#Options_Available">Options Available</A>. Returns the option's previous value. <CODE>$optname</CODE> is
@@ -433,6 +448,20 @@ Return the current value of one of the SpeedyCGI options.
 
 <P>
 <PRE>    $sp-&gt;getopt('TIMEOUT');
+</PRE>
+<DT><STRONG><A NAME="item_shutdown_now">shutdown_now</A></STRONG><DD>
+<P>
+Shut down the perl interpreter right away. This function does not return.
+
+<P>
+<PRE>    $sp-&gt;shutdown_now
+</PRE>
+<DT><STRONG><A NAME="item_shutdown_next_time">shutdown_next_time</A></STRONG><DD>
+<P>
+Shut down the perl interpreter as soon as this request is done.
+
+<P>
+<PRE>    $sp-&gt;shutdown_next_time
 </PRE>
 </DL>
 <P>
@@ -477,7 +506,7 @@ Apache as documented in <A HREF="#Apache_Configuration">Apache Configuration</A>
 To compile SpeedyCGI you will need perl 5.004 or later, and a C compiler,
 preferably the same one that your perl distribution was compiled with.
 SpeedyCGI is known to work under Solaris, Redhat Linux, FreeBSD and
-OpenBSD. There may be problems with other OSes or other versions of Perl.
+OpenBSD. There may be problems with other OSes or earlier versions of Perl.
 SpeedyCGI may not work with threaded perl -- as of release 2.10, Linux and
 Solaris seem to work OK with threaded perl, but FreeBSD does not.
 
@@ -585,17 +614,6 @@ handled by SpeedyCGI.
     &lt;/Location&gt;
 </PRE>
 </OL>
-<P>
-<HR>
-<H1><A NAME="BUGS_TODO">BUGS / TODO</A></H1>
-<P>
-Please report any bugs or requests for changes to <A
-HREF="mailto:speedycgi@newlug.org.">speedycgi@newlug.org.</A> The current
-bugs / todo list can be found at <A
-HREF="http://www.sourceforge.net/projects/speedycgi/.">http://www.sourceforge.net/projects/speedycgi/.</A>
-Go to the Bug Tracking menu and select the group ``bug'' for bugs, or the
-group ``rfe'' for the todo list.
-
 <P>
 <HR>
 <H1><A NAME="FREQUENTLY_ASKED_QUESTIONS">FREQUENTLY ASKED QUESTIONS</A></H1>
@@ -718,23 +736,6 @@ working, you can use code like this:
 </DL>
 <P>
 <HR>
-<H1><A NAME="MAILING_LIST">MAILING LIST</A></H1>
-<P>
-The mailing list address is <A
-HREF="mailto:speedycgi@newlug.org.">speedycgi@newlug.org.</A> Subscribe by
-sending a message to <A
-HREF="mailto:speedycgi-request@newlug.org">speedycgi-request@newlug.org</A>
-with the word ``subscribe'' in the body.
-
-<P>
-An archive of the mailing list is at <A
-HREF="http://newlug.org/mailArchive/speedycgi/">http://newlug.org/mailArchive/speedycgi/</A>
-and mirrored at <A
-HREF="http://daemoninc.com/SpeedyCGI/mailArchive/">http://daemoninc.com/SpeedyCGI/mailArchive/</A>
-
-
-<P>
-<HR>
 <H1><A NAME="DOWNLOADING">DOWNLOADING</A></H1>
 <P>
 <HR>
@@ -743,7 +744,7 @@ HREF="http://daemoninc.com/SpeedyCGI/mailArchive/">http://daemoninc.com/SpeedyCG
 Binaries for many OSes can be found at:
 
 <P>
-<PRE>    <A HREF="http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries">http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries</A>
+<PRE>    <A HREF="http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries/">http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries/</A>
 </PRE>
 <P>
 There are also some older debian packages available from:
@@ -794,15 +795,73 @@ Press Enter when prompted for a password.
 
 <P>
 <HR>
-<H1><A NAME="TRANSLATIONS">TRANSLATIONS</A></H1>
-<DL>
-<DT><STRONG><A NAME="item_Japanese">Japanese</A></STRONG><DD>
+<H1><A NAME="MORE_INFORMATION">MORE INFORMATION</A></H1>
+<P>
+<HR>
+<H2><A NAME="SpeedyCGI_Home_Page">SpeedyCGI Home Page</A></H2>
+<P>
+<A
+HREF="http://daemoninc.com/SpeedyCGI/">http://daemoninc.com/SpeedyCGI/</A>
+
+<P>
+<HR>
+<H2><A NAME="Mailing_List">Mailing List</A></H2>
+<P>
+The mailing list address is <A
+HREF="mailto:speedycgi@newlug.org.">speedycgi@newlug.org.</A> Subscribe by
+sending a message to <A
+HREF="mailto:speedycgi-request@newlug.org">speedycgi-request@newlug.org</A>
+with the word ``subscribe'' in the body. An archive of the mailing list is
+at <A
+HREF="http://newlug.org/mailArchive/speedycgi/">http://newlug.org/mailArchive/speedycgi/</A>
+and mirrored at <A
+HREF="http://daemoninc.com/SpeedyCGI/mailArchive/.">http://daemoninc.com/SpeedyCGI/mailArchive/.</A>
+There is also a search interface at <A
+HREF="http://daemoninc.com/SpeedyCGI/search_mail.html">http://daemoninc.com/SpeedyCGI/search_mail.html</A>
+
+
+<P>
+<HR>
+<H2><A NAME="Bugs_and_Todo_List">Bugs and Todo List</A></H2>
+<P>
+Please report any bugs or requests for changes to the mailing list. The
+current bugs / todo list can be found at <A
+HREF="http://www.sourceforge.net/projects/speedycgi/.">http://www.sourceforge.net/projects/speedycgi/.</A>
+Go to the Bug Tracking menu and select the group ``bug'' for bugs, or the
+group ``rfe'' for the todo list.
+
+<P>
+<HR>
+<H2><A NAME="Japanese_Translation">Japanese Translation</A></H2>
 <P>
 <A
 HREF="http://member.nifty.ne.jp/hippo2000/perltips/CGI/SpeedyCGI.htm">http://member.nifty.ne.jp/hippo2000/perltips/CGI/SpeedyCGI.htm</A>
 
 
-</DL>
+<P>
+<HR>
+<H2><A NAME="Benchmarks">Benchmarks</A></H2>
+<P>
+<A
+HREF="http://daemoninc.com/SpeedyCGI/benchmarks/">http://daemoninc.com/SpeedyCGI/benchmarks/</A>
+
+
+<P>
+<HR>
+<H2><A NAME="Success_Stories">Success Stories</A></H2>
+<P>
+<A
+HREF="http://daemoninc.com/SpeedyCGI/success_stories/">http://daemoninc.com/SpeedyCGI/success_stories/</A>
+
+
+<P>
+<HR>
+<H2><A NAME="Revision_History">Revision History</A></H2>
+<P>
+<A
+HREF="http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/Changes">http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/Changes</A>
+
+
 <P>
 <HR>
 <H1><A NAME="COPYRIGHT">COPYRIGHT</A></H1>

@@ -25,8 +25,8 @@
 #define speedy_memmove(d,s,n)	memmove(d,s,n)
 #define speedy_bzero(s,n)	memset(s,'\0',n)
 #define speedy_free(s)		free(s)
-#define speedy_malloc(n)	malloc(n)
-#define speedy_realloc(s,n)	realloc(s,n)
+#define speedy_new(s,n,t)	((s) = (t*)malloc((n)*sizeof(t)))
+#define speedy_renew(s,n,t)	((s) = (t*)realloc((s),(n)*sizeof(t)))
 #define speedy_execvp(f,a)	execvp(f,(char *const*)a)
 
 void speedy_abort(const char *s);

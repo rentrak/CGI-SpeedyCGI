@@ -31,7 +31,7 @@ void speedy_script_close() {
 
 void speedy_script_missing() {
     DIE_QUIET("Missing script filename.  "
-	"Type \"perldoc CGI::SpeedyCGI\" for SpeedyCGI documentation.");
+	"Type \"perldoc " SPEEDY_PKGNAME "\" for SpeedyCGI documentation.");
 }
 
 int speedy_script_open_failure() {

@@ -35,10 +35,12 @@ my $scr = 't/scripts/sh_bang.2';
 utime time, time, $scr;
 sleep 1;
 
+
 sub onerun {
     my $pid = open(F, '-|');
     if (!$pid) {
-	exec($ENV{SPEEDY}, $scr);
+	$^W = 0;
+	eval {exec($ENV{SPEEDY}, $scr)};
 	exit(1);
     }
     $SIG{ALRM} = sub {kill 9, $pid};

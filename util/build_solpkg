@@ -137,8 +137,9 @@ make_pkg 0 $pkgid $PKGNM "`pl_depend 1`" &&
 make_proto 0 1 $MODULE &&
 make_pkginfo $modid "$MODNM_PRETTY" "$APACHE_DESC" &&
 (
-    echo "P SUNWapchu Apache Web Server"
+    echo "P SUNWapchu Apache Web Server (usr)"
+    echo "P SUNWapchr Apache Web Server (root)"
     echo "P $pkgid $PKGNM_PRETTY"
 ) |
 make_depend &&
-make_pkg 1 $modid ${PKGNM}-$MODNM "Apache Web Server (SUNWapchu)"
+make_pkg 1 $modid ${PKGNM}-$MODNM "Apache Web Server (SUNWapchu, SUNWapchr)"

@@ -15,7 +15,7 @@ utime time, time, 't/scripts/basic.1';
 sleep 1;
 
 my $save = $ENV{SPEEDY_BACKENDPROG};
-$ENV{SPEEDY_BACKENDPROG} = '/non-existent';
+$ENV{SPEEDY_BACKENDPROG} = '/bin/ls';
 $out = `$ENV{SPEEDY} t/scripts/basic.1 2>&1`;
 $ok = ($? & 255) == 0 && $out =~ /cannot spawn/i;
 #print STDERR "out=$out status=$?\n";

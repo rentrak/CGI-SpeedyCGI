@@ -23,10 +23,7 @@
  * Accomodate 5.004
  */
 #if PATCHLEVEL < 5
-#define newSVpvn(s,l) my_newSVpvn(s,l)
-SPEEDY_INLINE static SV *my_newSVpvn(char *s, int l) {
-    return l ? newSVpv(s, l) : newSVpv("",0);
-}
+#define newSVpvn(s,l) newSVpv((l) ? (s) : "", (l))
 #endif
 
 /*
@@ -70,6 +67,11 @@ SPEEDY_INLINE static SV *my_newSVpvn(char *s, int l) {
 #define DEVINO_GET(fp,devino) PerlIO_read(fp, &(devino), sizeof(devino))
 #define my_SvPV(sv) SvPV(sv, junk_len)
 #define chdir_path_sv(sv) chdir_path(my_SvPV(sv), NULL)
+#define my_hv_store(hash, key, klen, val) \
+    do { \
+	if (!hv_store((hash), (key), (klen), (val), 0)) \
+	    SvREFCNT_dec(val); \
+    } while (0)
 
 typedef struct {
     int			refcnt;
@@ -78,7 +80,7 @@ typedef struct {
 } SpeedyCwd;
 
 typedef struct {
-    CV		*handler;
+    SV		*handler;
     SpeedyCwd	*last_cwd;
 } SpeedyScript;
 
@@ -110,13 +112,15 @@ typedef struct {
 #define PERLVAL_OPTS_CHANGED      ((SV*)(SpeedyPerlVars[8].ptr))
 #define PERLVAR_OPTS              (SpeedyPerlVars[9])
 #define PERLVAL_OPTS              ((HV*)(SpeedyPerlVars[9].ptr))
-#define PERLVAR_SHUTDOWN_HANDLER  (SpeedyPerlVars[10])
-#define PERLVAL_SHUTDOWN_HANDLER  ((SV*)(SpeedyPerlVars[10].ptr))
-#define PERLVAR_I_AM_SPEEDY       (SpeedyPerlVars[11])
-#define PERLVAL_I_AM_SPEEDY       ((SV*)(SpeedyPerlVars[11].ptr))
-#define PERLVAR_RUN_CLEANUP       (SpeedyPerlVars[12])
-#define PERLVAL_RUN_CLEANUP       ((CV*)(SpeedyPerlVars[12].ptr))
-#define PERLVAR_COUNT             13
+#define PERLVAR_RUN_SHUTDOWN      (SpeedyPerlVars[10])
+#define PERLVAL_RUN_SHUTDOWN      ((CV*)(SpeedyPerlVars[10].ptr))
+#define PERLVAR_SUB               (SpeedyPerlVars[11])
+#define PERLVAL_SUB               ((SV*)(SpeedyPerlVars[11].ptr))
+#define PERLVAR_I_AM_SPEEDY       (SpeedyPerlVars[12])
+#define PERLVAL_I_AM_SPEEDY       ((SV*)(SpeedyPerlVars[12].ptr))
+#define PERLVAR_RUN_CLEANUP       (SpeedyPerlVars[13])
+#define PERLVAL_RUN_CLEANUP       ((CV*)(SpeedyPerlVars[13].ptr))
+#define PERLVAR_COUNT             14
 
 static SpeedyPerlVar SpeedyPerlVars[] = {
     {NULL, SVt_PVHV , "ENV"},
@@ -127,11 +131,12 @@ static SpeedyPerlVar SpeedyPerlVars[] = {
     {NULL, SVt_PV   , "0"},
     {NULL, SVt_PV   , "@"},
     {NULL, SVt_PVCV , "CGI::_reset_globals"},
-    {NULL, SVt_IV   , "CGI::SpeedyCGI::_opts_changed"},
-    {NULL, SVt_PVHV , "CGI::SpeedyCGI::_opts"},
-    {NULL, SVt_PV   , "CGI::SpeedyCGI::_shutdown_handler"},
-    {NULL, SVt_IV   , "CGI::SpeedyCGI::_i_am_speedy"},
-    {NULL, SVt_PVCV , "CGI::SpeedyCGI::_run_cleanup"},
+    {NULL, SVt_IV   , SPEEDY_PKG("_opts_changed")},
+    {NULL, SVt_PVHV , SPEEDY_PKG("_opts")},
+    {NULL, SVt_PVCV , SPEEDY_PKG("_run_shutdown")},
+    {NULL, SVt_PV   , SPEEDY_PKG("_sub")},
+    {NULL, SVt_IV   , SPEEDY_PKG("i_am_speedy")},
+    {NULL, SVt_PVCV , SPEEDY_PKG("_run_cleanup")},
 };
 
 /* End of generated section */
@@ -228,7 +233,7 @@ static SpeedyScript *find_scr(SpeedyDevIno devino, int *is_new) {
     sv = find_devino(devino, scr_hash, 1)[0];
 
     if ((*is_new = !SvOK(sv))) {
-	retval = speedy_malloc(sizeof(SpeedyScript));
+	speedy_new(retval, 1, SpeedyScript);
 	retval->handler = NULL;
 	retval->last_cwd = NULL;
 	sv_setiv(sv, (IV) retval);
@@ -255,11 +260,6 @@ static void my_call_sv(SV *sv) {
 	PUSHMARK(SP);
 	call_sv(sv, G_DISCARD | G_NOARGS);
     }
-}
-
-SPEEDY_INLINE static void my_hv_store(HV* hash, char* key, int klen, SV* val) {
-    if (!hv_store(hash, key, (klen == -1 ? strlen(key) : klen), val, 0))
-	SvREFCNT_dec(val);
 }
 
 static void cwd_refcnt_dec(SpeedyCwd *cwd) {
@@ -354,6 +354,31 @@ static void remove_from_temp() {
     }
 }
 
+static void *get_perlvar(SpeedyPerlVar *pv) {
+    if (!pv->ptr) {
+	switch(pv->type) {
+	    case SVt_PVIO:
+		pv->ptr = gv_fetchpv(pv->name, 1, SVt_PVIO);
+		break;
+	    case SVt_PVAV:
+		pv->ptr = get_av(pv->name, 1);
+		break;
+	    case SVt_PVHV:
+		pv->ptr = get_hv(pv->name, 1);
+		break;
+	    case SVt_PVCV:
+		pv->ptr = get_cv(pv->name, 0);
+		break;
+	    default:
+		pv->ptr = get_sv(pv->name, 1);
+		break;
+	}
+	if (pv->type != SVt_PVCV && !pv->ptr)
+	    DIE_QUIET("Cannot create perl variable %s", pv->name);
+    }
+    return pv->ptr;
+}
+
 /* Shutdown and exit. */
 static void all_done(int exec_myself) {
 
@@ -378,9 +403,8 @@ static void all_done(int exec_myself) {
     /* Destroy the interpreter */
     if (my_perl) {
 
-	/* Call the shutdown handler if present */
-	if (my_SvPV(PERLVAL_SHUTDOWN_HANDLER)[0])
-	    my_call_sv(PERLVAL_SHUTDOWN_HANDLER);
+	/* Call any shutdown functions */
+	my_call_sv(get_perlvar(&PERLVAR_RUN_SHUTDOWN));
 
 	perl_destruct(my_perl);
     }
@@ -421,8 +445,9 @@ static void backend_accept() {
 
 
 /* Read in a string on stdin. */
-SPEEDY_INLINE static int get_string(PerlIO *pio_in, char **buf) {
+SPEEDY_INLINE static char *get_string(register PerlIO *pio_in, int *sz_ret) {
     int sz;
+    register char *buf;
 
     /* Read length of string */
     sz = PerlIO_getc(pio_in);
@@ -431,23 +456,23 @@ SPEEDY_INLINE static int get_string(PerlIO *pio_in, char **buf) {
     case -1:
 	DIE_QUIET("protocol error");
     case 0:
-	*buf = NULL;
+	buf = NULL;
 	break;
     case MAX_SHORT_STR:
 	PerlIO_read(pio_in, &sz, sizeof(int));
 	/* Fall through */
     default:
-	{
-	    /* Allocate space */
-	    char *b = *buf = speedy_malloc(sz+1);
+	/* Allocate space */
+	speedy_new(buf, sz+1, char);
 
-	    /* Read string and terminate */
-	    PerlIO_read(pio_in, b, sz);
-	    b[sz] = '\0';
-	}
+	/* Read string and terminate */
+	PerlIO_read(pio_in, buf, sz);
+	buf[sz] = '\0';
 	break;
     }
-    return sz;
+    if (sz_ret)
+	*sz_ret = sz;
+    return buf;
 }
 
 static void do_proto2(char **cwd_path) {
@@ -461,7 +486,7 @@ static void do_proto2(char **cwd_path) {
 	PerlIO *pio_file = PerlIO_fdopen(dup(PREF_FD_ACCEPT_E), "r");
 
 	/* Get cwd */
-	get_string(pio_file, cwd_path);
+	*cwd_path = get_string(pio_file, NULL);
 
 	PerlIO_close(pio_file);
     }
@@ -476,36 +501,13 @@ static void set_sigs() {
     rsignal(SIGINT,  &doabort_sig);
 }
 
-static void *get_perlvar(SpeedyPerlVar *pv) {
-    if (!pv->ptr) {
-	switch(pv->type) {
-	    case SVt_PVIO:
-		pv->ptr = gv_fetchpv((char*)pv->name, 1, SVt_PVIO);
-		break;
-	    case SVt_PVAV:
-		pv->ptr = get_av((char*)pv->name, 1);
-		break;
-	    case SVt_PVHV:
-		pv->ptr = get_hv((char*)pv->name, 1);
-		break;
-	    case SVt_PVCV:
-		pv->ptr = get_cv((char*)pv->name, 0);
-		break;
-	    default:
-		pv->ptr = get_sv((char*)pv->name, 1);
-		break;
-	}
-	if (pv->type != SVt_PVCV && !pv->ptr)
-	    DIE_QUIET("Cannot create perl variable %s", pv->name);
-    }
-    return pv->ptr;
-}
-
 static SpeedyCwd *cwd_new(const char *path, int path_is_dot) {
     char key[DEVINO_STR_SIZE];
     int key_len;
     SV *sv;
-    SpeedyCwd *cwd = speedy_malloc(sizeof(SpeedyCwd));
+    SpeedyCwd *cwd;
+    
+    speedy_new(cwd, 1, SpeedyCwd);
 
     /* Chdir to the given path */
     if (!path || chdir_path((path_is_dot ? "." : path), &(cwd->devino)) == -1) {
@@ -515,7 +517,7 @@ static SpeedyCwd *cwd_new(const char *path, int path_is_dot) {
 
     /* Make a new cwd structure */
     cwd->refcnt = 0;
-    cwd->path = newSVpv((char*)path, 0);
+    cwd->path = newSVpv(path, 0);
 
     /* Store in the hash */
     sv = newSViv((IV)cwd);
@@ -539,7 +541,7 @@ static void store_last_cwd(SpeedyCwd **last_cwd, SpeedyCwd *cwd) {
 	cwd_refcnt_dec(prev_ptr);
 }
 
-#define PACKAGE_FMT	"CGI::SpeedyCGI::_%s"
+#define PACKAGE_FMT	SPEEDY_PKG("_%s")
 #define COLON_HANDLER	"::handler"
 
 static void load_script(
@@ -587,13 +589,16 @@ static void load_script(
     }
     SvREFCNT_dec(sv);
 
-    /* See if we got an eval error */
-    if (SvTRUE(PERLVAL_EVAL_ERROR)) {
-	scr->handler = NULL;
-    } else {
+    /* If there were no eval errors, then store a reference to the handler  */
+    scr->handler = NULL;
+    if (!SvTRUE(PERLVAL_EVAL_ERROR)) {
+	CV *cv;
 	strcat(pkg, COLON_HANDLER);
-	scr->handler = get_cv(pkg, 0);
+	if ((cv = get_cv(pkg, 0)))
+	    scr->handler = newRV_inc((SV*)cv);
     }
+
+    /* Die if we couldn't create the handler for whatever reason */
     if (!scr->handler) {
 	DIE_QUIET("Could not compile code for %s: %s",
 	    scr_path, my_SvPV(PERLVAL_EVAL_ERROR));
@@ -603,11 +608,12 @@ static void load_script(
 /* One run of the perl process, do stdio using socket. */
 static void onerun(int single_script) {
     int sz, new_script, cwd_where;
-    char *buf, *scr_path, *s;
+    char *scr_path;
     SpeedyDevIno fe_scr;
     SpeedyScript *scr;
     pid_t mypid = speedy_util_getpid();
     PerlIO *pio_in, *pio_out, *pio_err;
+    register char *s, *buf;
 
     pio_in  = PerlIO_stdin();
     pio_out = PerlIO_stdout();
@@ -634,13 +640,14 @@ static void onerun(int single_script) {
     hv_undef(PERLVAL_ENV);
 
     /* Read in environment from stdin. */
-    while ((sz = get_string(pio_in, &buf))) {
+    while ((buf = get_string(pio_in, &sz))) {
 
 	/* Find equals. Store key/val in %ENV */
 	if ((s = strchr(buf, '='))) {
-	    int i = s - buf;
-	    SV *sv = newSVpvn(s+1, sz-(i+1));
-	    my_hv_store(PERLVAL_ENV, (char*)buf, i, sv);
+	    register int i = s - buf;
+	    register int len = sz - (i+1);
+	    SV *sv = newSVpvn(s+1, len);
+	    my_hv_store(PERLVAL_ENV, buf, i, sv);
 	    *s = '\0';
 	    my_setenv(buf, s+1);
 	}
@@ -655,8 +662,8 @@ static void onerun(int single_script) {
     av_undef(PERLVAL_ARGV);
 
     /* Read in argv from stdin. */
-    while ((sz = get_string(pio_in, &buf))) {
-	SV *sv = newSVpvn(buf, sz);
+    while ((buf = get_string(pio_in, &sz))) {
+	register SV *sv = newSVpvn(buf, sz);
 	av_push(PERLVAL_ARGV, sv);
 	speedy_free(buf);
     }
@@ -664,7 +671,7 @@ static void onerun(int single_script) {
     /*
      * Script filename
      */
-    get_string(pio_in, &scr_path);
+    scr_path = get_string(pio_in, NULL);
 
     /*
      * Script device/inode
@@ -772,38 +779,14 @@ static void onerun(int single_script) {
     sv_setpv(PERLVAL_PROGRAM_NAME, scr_path);
     speedy_free(scr_path);
 
+    /* If using groups, set the pointer to the correct handler */
+    if (!single_script)
+	sv_setsv(PERLVAL_SUB, scr->handler);
+
     /* Run the perl code.  Ignore return value since we want to stay persistent
      * no matter what the return code.
      */
-    if (single_script) {
-	(void) perl_run(my_perl);
-    } else {
-	dSP;
-	int i, argv_len = av_len(PERLVAL_ARGV);
-	SV **svp;
-
-	ENTER;
-	SAVETMPS;
-	PUSHMARK(SP);
-
-	/* Make room on the stack for the array */
-	EXTEND(SP, argv_len+1);
-
-	/* Copy @ARGV onto the stack so things like shift/pop work */
-	for (i = 0; i <= argv_len; ++i) {
-	    if ((svp = av_fetch(PERLVAL_ARGV, i, 0))) {
-		SV *sv = *svp;
-		PUSHs(sv_2mortal(newSVsv(sv)));
-	    }
-	}
-	PUTBACK;
-
-	/* Call the handler */
-	call_sv((SV*)scr->handler, G_DISCARD);
-
-	FREETMPS;
-	LEAVE;
-    }
+    (void) perl_run(my_perl);
     speedy_util_time_invalidate();
 
     /* Terminate any forked children */
@@ -869,6 +852,11 @@ void speedy_xs_init() {
     /* Tell our module that we are speedycgi */
     sv_inc(PERLVAL_I_AM_SPEEDY);
 
+    /* Avoid warnings about "used only once" */
+    GvMULTI_on(
+	gv_fetchpv(PERLVAR_I_AM_SPEEDY.name, 0, PERLVAR_I_AM_SPEEDY.type)
+    );
+
     /* Save our current directory now in case script changes it */
     if ((orig_cwd = cwd_new(speedy_util_getcwd(), 1)))
 	orig_cwd->refcnt++;
@@ -884,7 +872,7 @@ void speedy_xs_init() {
 	} else {
 	    sv = newSViv((int)o->value);
 	}
-	my_hv_store(PERLVAL_OPTS, (char*)o->name, o->name_len, sv);
+	my_hv_store(PERLVAL_OPTS, o->name, o->name_len, sv);
     }
 }
 
@@ -925,7 +913,7 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 	    temp_script_name = NULL;
 	}
     } else {
-	temp_script_name = dev_null;
+	temp_script_name = "-e&{$" SPEEDY_PKG("_sub") "}(@ARGV);";
     }
 
     /* Parse perl file. */
@@ -1005,10 +993,20 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 
 	/* See if we should get new options from the perl script */
 	if (SvIV(PERLVAL_OPTS_CHANGED)) {
+#	    ifdef __SUNPRO_C
+		/* Bug in Sun WorkShop 6 2000/04/07 C 5.1 optimizer.
+		 * It was consistently failing shutdown test #4 wwhich calls
+		 * the shutdown_now method.  That method sets MAXRUNS to 1,
+		 * then exits.  For some reason the compiler decided to store
+		 * OPTVAL_MAXRUNS in a register and ignore the fact that
+		 * speedy_opt_set can modify the value.
+		 */
+		OPTREC_MAXRUNS.value = (void*)atoi("100");
+#	    endif
 	    for (i = 0; i < SPEEDY_NUMOPTS; ++i) {
 		OptRec *o = speedy_optdefs + i;
 		SV **svp =
-		    hv_fetch(PERLVAL_OPTS, (char*)o->name, o->name_len, 0);
+		    hv_fetch(PERLVAL_OPTS, o->name, o->name_len, 0);
 		if (svp)
 		    (void) speedy_opt_set(o, my_SvPV(*svp));
 	    }

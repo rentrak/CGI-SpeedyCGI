@@ -30,6 +30,7 @@ use Exporter;
 use strict;
 use ExtUtils::MakeMaker;
 use ExtUtils::Embed;
+use Cwd;
 use vars qw(@src_generated %write_makefile_common);
 
 # Turn these off in the distribution
@@ -54,7 +55,7 @@ elsif ($PROFILING) {
 		  '-DSPEEDY_PROFILING=\\\\\"`pwd`\\\\\"';
 }
 elsif ($DEVEL) {
-    $OPTIMIZE	= $WARNOPTS . '-g -O';
+    $OPTIMIZE	= $WARNOPTS . ' -g ';
 }
 else {
     # Force -O here, because otherwise on Sun they use odd OPTIMIZE flags
@@ -81,16 +82,10 @@ sub init { my $class = shift;
 sub am_frontend {1}
 
 sub pwd {
-    my $pwd = `pwd`;
-    chop $pwd;
-    return $pwd;
+    return &Cwd::cwd;
 }
 
-sub my_name {
-    my $x = &pwd;
-    $x =~ s/.*\/speedy_([^\/]*)$/$1/;
-    return $x;
-}
+sub my_name { die; }
 
 sub my_name_full { my $class = shift;
     $class->prefix . $class->my_name;
@@ -169,7 +164,7 @@ sub allinc { (<../src/*.h>) }
 
 sub symlink_cmds { my $class = shift;
     return join('', map {
-	sprintf("%s: ../src/%s speedy.h\n\trm -f %s; ln -s ../src/%s %s\n\n",
+	sprintf("%s: ../src/%s speedy.h\n\t\$(RM_F) %s\n\t\$(CP) ../src/%s %s\n\n",
 	    ($_) x 5
 	);
     } @_);
@@ -179,18 +174,15 @@ sub symlink_c_files { my $class = shift;
     $class->symlink_cmds($class->src_files_c);
 }
 
-sub speedy_h_cmds { my $class = shift;
+sub make_speedy_h { my $class = shift;
     my($pre, $inc, $main) = (
 	$class->prefix, $class->inc, $class->main_h
     );
-    my @files = ("${pre}inc_${inc}", "${pre}inc", $main);
-    my $echo_cmds = join('; ', map {"echo '#include \"$_.h\"'"} @files);
-    return join("\n",
-	'',
-	'speedy.h: Makefile ../src/speedy_optdefs.h',
-	"	($echo_cmds) >speedy.h",
-	'',
-    );
+    open(F, ">speedy.h") || die;
+    foreach ("${pre}inc_${inc}", "${pre}inc", $main) {
+	print F "#include \"$_.h\"\n";
+    }
+    close(F);
 }
 
 sub optdefs_cmds { my($class, $dir) = @_;
@@ -198,10 +190,10 @@ sub optdefs_cmds { my($class, $dir) = @_;
     my $gen = join(' ', map {"$dir/$_"} @src_generated);
     "
 ${gen}: $dir/Makefile $dir/SpeedyCGI.src $dir/optdefs
-	(cd $dir; \$(MAKE) SPEEDY_INSTALL_BIN=\$(INSTALLBIN))
+	cd $dir && \$(MAKE)
 
 $dir/Makefile: $dir/Makefile.PL
-	(cd ${dir}; \$(PERL) Makefile.PL)
+	cd $dir && \$(PERL) Makefile.PL
     ";
 }
 
@@ -213,8 +205,8 @@ sub extra_defines { my $class = shift;
     );
 }
 
-sub write_makefile { my $class = shift;
-    WriteMakefile(
+sub mm_params { my $class = shift;
+    return (
 	NAME		=> $class->my_name_full,
 	MAP_TARGET	=> $class->my_name_full,
 	OBJECT		=> join(' ', $class->src_files_o),
@@ -224,6 +216,10 @@ sub write_makefile { my $class = shift;
 	DEFINE		=> $class->extra_defines,
 	%write_makefile_common
     );
+}
+
+sub write_makefile {
+    WriteMakefile(shift->mm_params);
 }
 
 sub clean_files_full { my $class = shift;
@@ -261,20 +257,35 @@ sub add_suffix { my($class, $suf) = (shift, shift);
     return (map {"$_$suf"} @_);
 }
 
+sub testing_postamble { my $class = shift;
+    my $mod_libexec = `apxs -q LIBEXECDIR 2>/dev/null`;
+    my $topdir = &pwd;
+    $topdir =~ s/\/[^\/]*$//;
+
+    "
+MODULE_LIBEXECDIR = $mod_libexec
+TEST_SPEEDY = ${topdir}/speedy/speedy
+TEST_SPEEDY_BACKENDPROG = ${topdir}/speedy_backend/speedy_backend
+TEST_SPEEDY_MODULE = ${topdir}/mod_speedycgi/mod_speedycgi.so
+
+FULLPERL = SPEEDY=\$(TEST_SPEEDY) SPEEDY_BACKENDPROG=\$(TEST_SPEEDY_BACKENDPROG) SPEEDY_MODULE=\$(TEST_SPEEDY_MODULE) \$(PERL)
+
+test_install:
+	\$(MAKE) test TEST_SPEEDY=\$(INSTALLBIN)/speedy TEST_SPEEDY_BACKENDPROG=\$(INSTALLBIN)/speedy_backend TEST_SPEEDY_MODULE=\$(MODULE_LIBEXECDIR)/mod_speedycgi.so
+
+    ";
+}
+
 sub postamble { my $class = shift;
-    my $speedy_h = $class->speedy_h_cmds;
+    $class->make_speedy_h;
     my $optdefs = $class->optdefs_cmds;
     my $allinc = join(' ', $class->allinc);
     my $c_file_link = $class->symlink_c_files;
     my $clean_files = join(' ', $class->clean_files);
     my $my_name = $class->my_name_full;
-    my $topdir = &pwd;
-    $topdir =~ s/\/[^\/]*$//;
 
+    $class->testing_postamble . 
     "
-FULLPERL = SPEEDY=${topdir}/speedy/speedy SPEEDY_BACKENDPROG=${topdir}/speedy_backend/speedy_backend \$(PERL)
-
-$speedy_h
 
 $c_file_link
 
@@ -283,12 +294,12 @@ $optdefs
 \$(OBJECT) : $allinc
 
 clean ::
-	rm -f $clean_files speedy.h $my_name
+	\$(RM_F) $clean_files speedy.h $my_name
     ";
 }
 
 sub check_syms_def { 
-    $DEVEL ? '../util/check_syms' : 'true';
+    $DEVEL ? '../util/check_syms' : '$(NOOP)';
 }
 
 sub remove_libs { undef }
@@ -308,7 +319,10 @@ sub makeaperl { my $class = shift;
 all :: $my_name
 
 ${my_name}: \$(OBJECT)
-	rm -f ${my_name}; $remove_libs \$(LD) -o ${my_name} \$(OBJECT) $ldopts && $check_syms && echo ''
+	\$(RM_F) ${my_name}
+	$remove_libs \$(LD) -o ${my_name} \$(OBJECT) $ldopts
+	$check_syms
+	echo ''
     ";
 }
 

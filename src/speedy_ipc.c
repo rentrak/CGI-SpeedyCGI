@@ -45,11 +45,11 @@ static void make_sockname(
     speedy_free(fname);
 }
 
-static int make_sock(int pref_fd) {
+static int make_sock() {
     int i, fd;
 
     for (i = 0; i < 300; ++i) {
-	fd = speedy_util_pref_fd(socket(AF_UNIX, SOCK_STREAM, 0), pref_fd);
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (fd != -1)
 	    return fd;
 	else if (NO_BUFSPC(errno)) {
@@ -103,6 +103,7 @@ void speedy_ipc_listen(slotnum_t slotnum) {
     if (listen(listener, LISTEN_BACKLOG) == -1)
 	speedy_util_die("cannot listen on socket");
     fstat(listener, &listener_stbuf);
+    listener = speedy_util_pref_fd(listener, PREF_FD_LISTENER);
     speedy_poll_init(&listener_pi, listener);
 }
 
@@ -176,8 +177,8 @@ static int do_connect(slotnum_t slotnum, int fd) {
 }
 
 void speedy_ipc_connect_prepare(int *s, int *e) {
-    *s = make_sock(PREF_FD_DONTCARE);
-    *e = make_sock(PREF_FD_DONTCARE);
+    *s = make_sock();
+    *e = make_sock();
 }
 
 int speedy_ipc_connect(slotnum_t slotnum, int s, int e) {

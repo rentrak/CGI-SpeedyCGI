@@ -26,7 +26,7 @@ typedef struct {
     int		is_mmaped;
 } SpeedyMapInfo;
 
-SPEEDY_INLINE int speedy_util_pref_fd(int oldfd, int newfd);
+int speedy_util_pref_fd(int oldfd, int newfd);
 SPEEDY_INLINE int speedy_util_getuid();
 SPEEDY_INLINE int speedy_util_geteuid();
 int speedy_util_seteuid(int id);

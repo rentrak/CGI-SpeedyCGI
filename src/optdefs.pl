@@ -41,6 +41,7 @@ my @type = sort keys %ctype;
 
 my $INFILE	= "optdefs";
 my $INSTALLBIN	= shift;
+$columns = 68;		# For the wrap function
 
 die "Usage: $0 installbin-directory\n" unless $INSTALLBIN;
 
@@ -105,16 +106,21 @@ for (my $i = 0; $i <= $#options; ++$i) {
 &open_file('speedy_optdefs.c');
 print "\n#include \"speedy.h\"\n\n";
 print "OptRec speedy_optdefs[] = {\n";
+
 foreach my $opt (@options) {
-    printf "    {\n\t\"%s\",\n\t%d,\n\t'%s',\n\tOTYPE_%s,\n\t(void*)%s,\n\t%d\n    },\n",
-	uc($opt->{option}),
-	length($opt->{option}),
-	$opt->{letter} || "\\0",
-	uc($opt->{type}),
-	defined($opt->{defval})
-	    ? ($ctype{$opt->{type}} eq 'char*' ? "\"$opt->{defval}\"" : $opt->{defval})
-	    : 0,
-    ;
+    my @toprint = (
+	["'%s'",	$opt->{letter} || "\\0"],
+	["OTYPE_%s",	uc($opt->{type})],
+	["%d",		0],
+	["%d",		length($opt->{option})],
+	["\"%s\"",	uc($opt->{option})],
+	["(void*)%s",	!defined($opt->{defval}) ? 0 :
+	    ($ctype{$opt->{type}} eq 'char*'
+		? "\"$opt->{defval}\"" : $opt->{defval})
+	],
+    );
+    my $fmt = "\t{\n". join('', map {"\t\t".$_->[0].",\n"} @toprint) . "\t},\n";
+    printf $fmt, map {$_->[1]} @toprint;
 }
 print "};\n";
 
@@ -173,7 +179,6 @@ print "{NULL}\n};\n";
 #
 &open_file('SpeedyCGI.pm', 1);
 open(I, '<SpeedyCGI.src') || die "SpeedyCGI.src: $!\n";
-$columns = 54; # For the wrap function
 while (<I>) {
     if (/INSERT_OPTIONS_POD_HERE/) {
 	foreach my $opt (@options) {

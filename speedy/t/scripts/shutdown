@@ -1,5 +1,17 @@
 
 use CGI::SpeedyCGI;
-CGI::SpeedyCGI->new->set_shutdown_handler(sub {open(F, ">$ARGV[0]")});
+
+my $sp = CGI::SpeedyCGI->new;
+
+my $method = ($ARGV[1] == 1) ? 'add_shutdown_handler' : 'set_shutdown_handler';
+$sp->$method(sub {open(F, ">$ARGV[0]")});
 $SIG{TERM} = IGNORE;
+
+if ($ARGV[1] == 2) {
+    $sp->shutdown_next_time();
+}
+elsif ($ARGV[1] == 3) {
+    $sp->shutdown_now();
+}
+
 print $$;

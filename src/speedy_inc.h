@@ -47,6 +47,9 @@ typedef struct {
     ino_t	i;
 } SpeedyDevIno;
 
+#define SPEEDY_PKGNAME	"CGI::SpeedyCGI"
+#define SPEEDY_PKG(s)	SPEEDY_PKGNAME "::" s
+
 #include "speedy_util.h"
 #include "speedy_opt.h"
 #include "speedy_optdefs.h"

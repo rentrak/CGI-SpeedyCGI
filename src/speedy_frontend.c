@@ -107,9 +107,11 @@ static void backend_spawn(slotnum_t gslotnum) {
 	    {
 		const char *orig_file = speedy_opt_orig_argv()[0];
 		if (orig_file && *orig_file) {
-		    char *fname =
-			speedy_malloc(strlen(orig_file)+sizeof(BE_SUFFIX)+1);
-
+		    char *fname;
+		    
+		    speedy_new(
+			fname, strlen(orig_file)+sizeof(BE_SUFFIX)+1, char
+		    );
 		    sprintf(fname, "%s%s", orig_file, BE_SUFFIX);
 		    speedy_util_execvp(fname, argv);
 		}
@@ -509,7 +511,11 @@ typedef struct {
 	enlarge_buf((b),(l))
 
 #define BUF_REALLOC(b,sz) \
-    (b)->buf = speedy_realloc((b)->buf, (b)->alloced = (sz))
+    do { \
+	int newsz = (sz); \
+	(b)->alloced = newsz; \
+	speedy_renew((b)->buf, newsz, char); \
+    } while (0)
 
 #define BUF_SHRINK(b) BUF_REALLOC(b, (b)->len)
 
@@ -548,7 +554,8 @@ static void enlarge_buf(SpeedyBuf *b, int min_to_add) {
 }
 
 static void alloc_buf(SpeedyBuf *b, int bytes) {
-    b->buf = speedy_malloc(b->alloced = bytes);
+    b->alloced = bytes;
+    speedy_new(b->buf, bytes, char);
     b->len = 0;
 }
 
@@ -558,9 +565,11 @@ static void add_string(SpeedyBuf *b, const char *s, int l) {
 }
 
 /* Copy a block of strings into the buffer,  */
-static void add_strings(SpeedyBuf *b, const char * const * p) {
+/* Profiling shows this is the top function for cpu time */
+static void add_strings(register SpeedyBuf *b, register const char * const * p)
+{
     int l;
-    const char *s;
+    register const char *s;
 
     /* Add strings in p array */
     for (; (s = *p); ++p) {

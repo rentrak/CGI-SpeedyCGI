@@ -27,6 +27,7 @@ sub src_files_extra {'perl'}
 sub src_files_o_extra {'xsinit.o'}
 sub clean_files_full_extra {'xsinit'}
 sub am_frontend {0}
+sub my_name {'backend'}
 
 use ExtUtils::Embed;
 

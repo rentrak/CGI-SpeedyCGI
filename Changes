@@ -1,5 +1,20 @@
 Revision history for Perl extension SpeedyCGI.
 
+2.11	Tue Mar 20 22:59:36 PST 2001
+
+	- When using the new Group option, exit was causing the whole
+	  interpreter to exit.
+	- Fixed a bug introduced in 2.10 where mod_speedycgi could run
+	  the wrong script
+	- Fixed a bug where mod_speedycgi could mix up the sh-bang options 
+	  between different scripts.
+	- Added automated mod_speedycgi testing.
+	- Added a workaround for a Solaris 2.5.1 bug that was causing the
+	  mungefds and touch tests to fail.
+	- Added a new variable $CGI::SpeedyCGI::i_am_speedy for a quick way
+	  to check if the script is running under speedycgi.
+	- New methods: add_shutdown_handler, shutdown_now, shutdown_next_time
+
 2.10	Wed Jan 31 02:56:33 PST 2001
 
 	- Multiple scripts in one interpreter using the new Group option.

@@ -45,7 +45,7 @@ void speedy_cb_read(CopyBuf *bp) {
     int n;
 
     if (!bp->buf) {
-	bp->buf = speedy_malloc(bp->maxsz);
+	speedy_new(bp->buf, bp->maxsz, char);
     }
     switch(n = read(bp->rdfd, bp->buf + bp->sz, bp->maxsz - bp->sz))
     {

@@ -51,22 +51,29 @@ use ExtUtils::Embed;
 sub postamble {
     my $extra = SpeedyMake->optdefs_cmds('src');
     if (&main::do_apache) {
-	$extra .= "\ninstall ::\n\tcd mod_speedycgi; make install\n\n";
+	$extra .= "\ninstall ::\n\tcd mod_speedycgi && \$(MAKE) install\n";
     }
-'
-mydist: README README.html lib/CGI/SpeedyCGI.pm tardist
 
-README: src/SpeedyCGI.pm
-	(cd src; $(PERL) -e "use Pod::Text; pod2text(\"-80\")" < SpeedyCGI.pm >../README)
+'
+test_install:
+	@cd mod_speedycgi && $(MAKE) test_install $(PASTHRU)
+	@cd speedy && $(MAKE) test_install $(PASTHRU)
+
+mydist: README README.html lib/CGI/SpeedyCGI.pm makereadable tardist
+
+makereadable:
+	chown -R $(USER) .
 	chmod -R u+w,go-w,go+r .
 
+README: src/SpeedyCGI.pm
+	cd src && $(PERL) -e "use Pod::Text; pod2text(-80)" <SpeedyCGI.pm >../README
+
 README.html: src/SpeedyCGI.pm
-	(cd src; pod2html SpeedyCGI.pm >../README.html; rm -f pod2html*)
+	cd src && pod2html SpeedyCGI.pm >../README.html && $(RM_F) pod2h*
 
 lib/CGI/SpeedyCGI.pm: src/SpeedyCGI.pm
-	test -d lib || mkdir lib
-	test -d lib/CGI || mkdir lib/CGI
-	cp src/SpeedyCGI.pm lib/CGI/SpeedyCGI.pm
+	$(MKPATH) lib/CGI
+	$(CP) src/SpeedyCGI.pm lib/CGI/SpeedyCGI.pm
 
 MAKE_INDEX = $(PERL) -w ./util/build_index $(VERSION)
 

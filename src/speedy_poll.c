@@ -27,8 +27,8 @@
 
 void speedy_poll_init(PollInfo *pi, int maxfd) {
     pi->maxfd	= maxfd;
-    pi->fds   = speedy_malloc((maxfd+1) * sizeof(struct pollfd));
-    pi->fdmap = speedy_malloc((maxfd+1) * sizeof(struct pollfd *));
+    speedy_new(pi->fds,   maxfd+1, struct pollfd);
+    speedy_new(pi->fdmap, maxfd+1, struct pollfd*);
     speedy_poll_reset(pi);
 }
 

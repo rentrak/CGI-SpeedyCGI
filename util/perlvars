@@ -4,7 +4,7 @@
 my @vars = (
     #
     # Perl-type
-    # Part of CGI::SpeedyCGII?
+    # Part of our package (CGI::SpeedyCGI)
     # Perl Name
     # Our name, optional
     #
@@ -16,11 +16,12 @@ my @vars = (
     ['SVt_PV',	  0, '0',			'PROGRAM_NAME'],
     ['SVt_PV',	  0, '@',			'EVAL_ERROR'],
     ['SVt_PVCV',  0, 'CGI::_reset_globals'],
-    ['SVt_IV',    1, 'opts_changed'],
-    ['SVt_PVHV',  1, 'opts'],
-    ['SVt_PV',    1, 'shutdown_handler'],
+    ['SVt_IV',    1, '_opts_changed'],
+    ['SVt_PVHV',  1, '_opts'],
+    ['SVt_PVCV',  1, '_run_shutdown'],
+    ['SVt_PV',    1, '_sub'],
     ['SVt_IV',    1, 'i_am_speedy'],
-    ['SVt_PVCV',  1, 'run_cleanup'],
+    ['SVt_PVCV',  1, '_run_cleanup'],
 );
 my $myname = 'util/perlvars';
 
@@ -42,6 +43,7 @@ foreach (@vars) {
 
     $name ||= $plname;
     $name =~ s/.*::_*//;
+    $name =~ s/^_+//;
     &def("PERLVAR_$name", "(SpeedyPerlVars[$i])");
     &def("PERLVAL_$name", "((${cast}*)(SpeedyPerlVars[$i].ptr))");
     ++$i;
@@ -52,8 +54,8 @@ print "\nstatic SpeedyPerlVar SpeedyPerlVars[] = {\n";
 foreach (@vars) {
     my($type, $ours, $plname) = @$_;
 
-    printf("    {NULL, %-8s , \"%s%s\"},\n",
-	$type, $ours ? 'CGI::SpeedyCGI::_' : '', $plname
+    printf("    {NULL, %-8s , %s%s},\n",
+	$type, $ours ? "SPEEDY_PKG(\"$plname\")" : "\"$plname\""
     );
 }
 print "};\n\n";

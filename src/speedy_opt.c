@@ -40,6 +40,7 @@ static StrList exec_argv, exec_envp, perl_argv;
 static const char * const *orig_argv;
 static int script_argv_loc;
 static int got_shbang;
+static OptRec *optdefs_save;	/* For save/restore */
 
 /*
  * StrList Methods
@@ -55,7 +56,7 @@ static int got_shbang;
 
 static void strlist_init(StrList *list) {
     list->malloced = STRLIST_MALLOC;
-    list->ptrs = (char**)speedy_malloc(sizeof(char*) * list->malloced);
+    speedy_new(list->ptrs, STRLIST_MALLOC, char*);
     list->len = 0;
 }
 
@@ -65,9 +66,7 @@ static void strlist_setlen(StrList *list, int newlen) {
     list->len = newlen;
     while (list->len >= list->malloced) {
 	list->malloced *= 2;
-	list->ptrs = (char**)speedy_realloc(
-	    list->ptrs, sizeof(char*) * list->malloced
-	);
+	speedy_renew(list->ptrs, list->malloced, char*);
     }
 }
 
@@ -165,11 +164,15 @@ static void cmdline_split(
 
 int speedy_opt_set(OptRec *optrec, const char *value) {
     if (optrec->type == OTYPE_STR) {
-	if (optrec->changed && optrec->value)
+	if ((optrec->flags & SPEEDY_OPTFL_MUST_FREE) && optrec->value)
 	    speedy_free(optrec->value);
-	if (optrec == &OPTREC_GROUP && *value == '\0')
-	    value = "default";
-	optrec->value = speedy_util_strdup(value);
+	if (optrec == &OPTREC_GROUP && *value == '\0') {
+	    optrec->value = "default";
+	    optrec->flags &= ~SPEEDY_OPTFL_MUST_FREE;
+	} else {
+	    optrec->value = speedy_util_strdup(value);
+	    optrec->flags |= SPEEDY_OPTFL_MUST_FREE;
+	}
     }
     else if (optrec->type == OTYPE_TOGGLE) {
 	optrec->value = (void*)!((int)optrec->value);
@@ -187,7 +190,7 @@ int speedy_opt_set(OptRec *optrec, const char *value) {
 	}
 	optrec->value = (void*)val;
     }
-    optrec->changed = 1;
+    optrec->flags |= SPEEDY_OPTFL_CHANGED;
     return 1;
 }
 
@@ -211,7 +214,7 @@ static int opt_set_byname(const char *optname, int len, const char *value) {
     int retval = 0;
 
     /* Copy the upper-case optname into "upper" */
-    upper = speedy_malloc(len+1);
+    speedy_new(upper, len+1, char);
     upper[len] = '\0';
     while (len--)
 	upper[len] = toupper(optname[len]);
@@ -259,7 +262,7 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
     cmdline_split(argv, NULL, &perl_argv, &speedy_opts, &script_argv);
 
     /* Append the PerlArgs option to perl_argv */
-    if (OPTREC_PERLARGS.changed) {
+    if (OPTREC_PERLARGS.flags & SPEEDY_OPTFL_CHANGED) {
 	StrList split;
 	char *tosplit[2];
 
@@ -276,9 +279,10 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
     for (i = 0; i < SPEEDY_NUMOPTS; ++i) {
 	OptRec *rec = speedy_optdefs + i;
 
-	if (rec->changed && rec->letter) {
+	if ((rec->flags & SPEEDY_OPTFL_CHANGED) && rec->letter) {
 	    const char *s = speedy_opt_get(rec);
-	    char *t = speedy_malloc(strlen(s)+3);
+	    char *t;
+	    speedy_new(t, strlen(s)+3, char);
 	    sprintf(t, "-%c%s", rec->letter, s);
 	    strlist_append3(&speedy_opts, t);
 	}
@@ -434,3 +438,27 @@ const char * const *speedy_opt_exec_argv() {
     return (const char * const *)strlist_export(&exec_argv);
 }
 #endif
+
+static void copy_optdefs(OptRec *dest, OptRec *src) {
+    int i;
+
+    speedy_memcpy(dest, src, SPEEDY_NUMOPTS * sizeof(OptRec));
+    for (i = 0; i < SPEEDY_NUMOPTS; ++i)
+	speedy_optdefs[i].flags &= ~SPEEDY_OPTFL_MUST_FREE;
+}
+
+void speedy_opt_save() {
+    speedy_new(optdefs_save, SPEEDY_NUMOPTS, OptRec);
+    copy_optdefs(optdefs_save, speedy_optdefs);
+}
+
+void speedy_opt_restore() {
+    int i;
+
+    for (i = 0; i < SPEEDY_NUMOPTS; ++i) {
+	OptRec *op = speedy_optdefs + i;
+	if ((op->flags & SPEEDY_OPTFL_MUST_FREE) && op->value)
+	    speedy_free(op->value);
+    }
+    copy_optdefs(speedy_optdefs, optdefs_save);
+}

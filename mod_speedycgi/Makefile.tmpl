@@ -30,13 +30,13 @@ APACHECTL=apachectl
 
 #   additional defines, includes and libraries
 INC=-I../src -I.
-#LIB=-Lmy/lib/dir -lmylib
 
 CFILES= $(SRC_CFILES)
 
 #   compile the shared object file
 mod_speedycgi.so: $(CFILES) ../src/mod_speedycgi_cmds.c
-	$(APXS) -c -o mod_speedycgi.so '$(DEF)' $(INC) $(LIB) $(CFILES) && $(CHECK_SYMS) mod_speedycgi.so
+	$(APXS) -c -o mod_speedycgi.so '$(DEF)' $(INC) $(LIB) $(CFILES)
+	$(CHECK_SYMS) mod_speedycgi.so
 
 #   install the shared object file into Apache 
 install: all
@@ -44,14 +44,11 @@ install: all
 
 #   cleanup
 clean:
-	-mv -f Makefile Makefile.old
-	-rm -f $(OFILES) mod_speedycgi.so $(C_FILE_CLEAN) speedy.h
+	-$(MV) Makefile Makefile.old
+	-$(RM_F) $(OFILES) mod_speedycgi.so $(C_FILE_CLEAN) speedy.h
 
 realclean: clean
 	rm -f Makefile.old
-
-#   simple test
-test:
 
 #   install and activate shared object by reloading Apache to
 #   force a reload of the shared object file
@@ -66,3 +63,4 @@ restart:
 stop:
 	$(APACHECTL) stop
 
+pure_all: all

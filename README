@@ -19,7 +19,7 @@ SYNOPSIS
      print "Running under speedy=", $sp->i_am_speedy ? 'yes' : 'no', "\n";
 
      # Register a shutdown handler
-     $sp->set_shutdown_handler(sub { do something here });
+     $sp->add_shutdown_handler(sub { do something here });
 
      # Register a cleanup handler
      $sp->register_cleanup(sub { do something here });
@@ -89,17 +89,17 @@ OPTIONS
         speedy Timeout option, use the environment variable named
         SPEEDY_TIMEOUT.
 
-    CGI::SpeedyCGI
+    Module
         The CGI::SpeedyCGI module provides the setopt method to set options
         from within the perl script at runtime. There is also a getopt
         method to retrieve the current options. See the section on "METHODS"
         below.
 
-    mod_speedycgi
+    Apache
         If you are using the optional Apache module, SpeedyCGI options can
         be set in the httpd.conf file. The name of the apache directive will
         always be Speedy followed by the option name. For example to set the
-        speedy Timeout option, use the apache directive SpeedyTimeout.
+        Timeout option, use the apache directive SpeedyTimeout.
 
   Context
 
@@ -122,7 +122,7 @@ OPTIONS
 
     BackendProg
             Command Line    : -p<string>
-            Default Value   : "/usr/bin/speedy_backend"
+            Default Value   : "/usr/local/bin/speedy_backend"
             Context         : mod_speedycgi, speedy
 
             Description:
@@ -136,8 +136,8 @@ OPTIONS
 
             Description:
 
-                Use <number> bytes for the buffer that
-                receives data from the CGI script.
+                Use <number> bytes for the buffer that receives data from
+                the CGI script.
 
     BufsizPost
             Command Line    : -b<number>
@@ -146,8 +146,8 @@ OPTIONS
 
             Description:
 
-                Use <number> bytes for the buffer that sends
-                data to the CGI script.
+                Use <number> bytes for the buffer that sends data to the
+                CGI script.
 
     Group
             Command Line    : -g<string>
@@ -156,21 +156,17 @@ OPTIONS
 
             Description:
 
-                Allow a single perl interpreter to run
-                multiple scripts. All scripts that are run
-                with the same group name and by the same user
-                will be run by the same group of perl
-                interpreters. If the group name is "none"
-                then grouping is disabled and each
-                interpreter will run one script. Different
-                group names allow scripts to be separated
-                into different groups. Name is
-                case-sensitive, and only the first
-                12-characters are significant. Specifying an
-                empty group name is the same as specifying
-                the group name "default" - this allows just
-                specifying "-g" on the command line to turn
-                on grouping.
+                Allow a single perl interpreter to run multiple scripts.
+                All scripts that are run with the same group name and by
+                the same user will be run by the same group of perl
+                interpreters. If the group name is "none" then grouping is
+                disabled and each interpreter will run one script.
+                Different group names allow scripts to be separated into
+                different groups. Name is case-sensitive, and only the
+                first 12-characters are significant. Specifying an empty
+                group name is the same as specifying the group name
+                "default" - this allows just specifying "-g" on the command
+                line to turn on grouping.
 
     MaxBackends
             Command Line    : -M<number>
@@ -179,9 +175,8 @@ OPTIONS
 
             Description:
 
-                If non-zero, limits the number of speedy
-                backends running for this cgi script to
-                <number>.
+                If non-zero, limits the number of speedy backends running
+                for this cgi script to <number>.
 
     MaxRuns
             Command Line    : -r<number>
@@ -190,11 +185,10 @@ OPTIONS
 
             Description:
 
-                Once the perl interpreter has run <number>
-                times, re-exec the backend process.  Zero
-                indicates no maximum.  This option is useful
-                for processes that tend to consume resources
-                over time.
+                Once the perl interpreter has run <number> times, re-exec
+                the backend process.  Zero indicates no maximum.  This
+                option is useful for processes that tend to consume
+                resources over time.
 
     PerlArgs
             Command Line    : N/A
@@ -203,8 +197,7 @@ OPTIONS
 
             Description:
 
-                Command-line options to pass to the perl
-                interpreter.
+                Command-line options to pass to the perl interpreter.
 
     Timeout
             Command Line    : -t<number>
@@ -213,9 +206,9 @@ OPTIONS
 
             Description:
 
-                If no new requests have been received after
-                <number> seconds, exit the persistent perl
-                interpreter.  Zero indicates no timeout.
+                If no new requests have been received after <number>
+                seconds, exit the persistent perl interpreter.  Zero
+                indicates no timeout.
 
     TmpBase
             Command Line    : -T<string>
@@ -224,9 +217,8 @@ OPTIONS
 
             Description:
 
-                Use the given prefix for creating temporary
-                files.  This must be a filename prefix, not a
-                directory name.
+                Use the given prefix for creating temporary files.  This
+                must be a filename prefix, not a directory name.
 
     Version
             Command Line    : -v
@@ -239,8 +231,7 @@ OPTIONS
 METHODS
     The following methods are available in the CGI::SpeedyCGI module.
 
-    new 
-        Create a new CGI::SpeedyCGI object.
+    new Create a new CGI::SpeedyCGI object.
 
             my $sp = CGI::SpeedyCGI->new;
 
@@ -253,11 +244,17 @@ METHODS
 
             $sp->register_cleanup(\&cleanup_func);
 
+    add_shutdown_handler($function_ref)
+        Add a function to the list of functions that will be called right
+        before the perl interpreter exits. This is not at the end of each
+        request, it is when the perl interpreter decides to exit completely
+        due to a Timeout or reaching MaxRuns.
+
+            $sp->add_shutdown_handler(sub {$dbh->logout});
+
     set_shutdown_handler($function_ref)
-        Register a function that will be called right before the perl
-        interpreter exits. This is not at the end of each request, it is
-        when the perl interpreter decides to exit completely due to a
-        Timeout or reaching MaxRuns.
+        Deprecated. Similar to `add_shutdown_handler', but only allows for a
+        single function to be registered.
 
             $sp->set_shutdown_handler(sub {$dbh->logout});
 
@@ -276,6 +273,12 @@ METHODS
             if (eval {require CGI::SpeedyCGI} && CGI::SpeedyCGI->i_am_speedy) {
                 Do something SpeedyCGI specific here...
 
+        To increase the speed of this check you can also test whether the
+        following variable is defined instead of going through the object
+        interface:
+
+            $CGI::SpeedyCGI::i_am_speedy
+
     setopt($optname, $value)
         Set one of the SpeedyCGI options given in the section on "Options
         Available". Returns the option's previous value. $optname is case-
@@ -288,6 +291,17 @@ METHODS
         is case-insensitive.
 
             $sp->getopt('TIMEOUT');
+
+    shutdown_now
+        Shut down the perl interpreter right away. This function does not
+        return.
+
+            $sp->shutdown_now
+
+    shutdown_next_time
+        Shut down the perl interpreter as soon as this request is done.
+
+            $sp->shutdown_next_time
 
 INSTALLATION
     To install SpeedyCGI you will need to either download a binary package
@@ -318,7 +332,7 @@ INSTALLATION
     To compile SpeedyCGI you will need perl 5.004 or later, and a C
     compiler, preferably the same one that your perl distribution was
     compiled with. SpeedyCGI is known to work under Solaris, Redhat Linux,
-    FreeBSD and OpenBSD. There may be problems with other OSes or other
+    FreeBSD and OpenBSD. There may be problems with other OSes or earlier
     versions of Perl. SpeedyCGI may not work with threaded perl -- as of
     release 2.10, Linux and Solaris seem to work OK with threaded perl, but
     FreeBSD does not.
@@ -400,13 +414,6 @@ INSTALLATION
             <Location />
                 Options ExecCGI
             </Location>
-
-BUGS / TODO
-    Please report any bugs or requests for changes to speedycgi@newlug.org.
-    The current bugs / todo list can be found at
-    http://www.sourceforge.net/projects/speedycgi/. Go to the Bug Tracking
-    menu and select the group "bug" for bugs, or the group "rfe" for the
-    todo list.
 
 FREQUENTLY ASKED QUESTIONS
     How does the speedy front end connect to the back end process?
@@ -497,21 +504,12 @@ FREQUENTLY ASKED QUESTIONS
                 $dbh = &open_db_connection;
             }
 
-MAILING LIST
-    The mailing list address is speedycgi@newlug.org. Subscribe by sending a
-    message to speedycgi-request@newlug.org with the word "subscribe" in the
-    body.
-
-    An archive of the mailing list is at
-    http://newlug.org/mailArchive/speedycgi/ and mirrored at
-    http://daemoninc.com/SpeedyCGI/mailArchive/
-
 DOWNLOADING
   Binaries
 
     Binaries for many OSes can be found at:
 
-        http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries
+        http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries/
 
     There are also some older debian packages available from:
 
@@ -545,9 +543,43 @@ AUTHOR
 SEE ALSO
     perl(1), httpd(8), apxs(8).
 
-TRANSLATIONS
-    Japanese
-        http://member.nifty.ne.jp/hippo2000/perltips/CGI/SpeedyCGI.htm
+MORE INFORMATION
+  SpeedyCGI Home Page
+
+    http://daemoninc.com/SpeedyCGI/
+
+  Mailing List
+
+    The mailing list address is speedycgi@newlug.org. Subscribe by sending a
+    message to speedycgi-request@newlug.org with the word "subscribe" in the
+    body. An archive of the mailing list is at
+    http://newlug.org/mailArchive/speedycgi/ and mirrored at
+    http://daemoninc.com/SpeedyCGI/mailArchive/. There is also a search
+    interface at http://daemoninc.com/SpeedyCGI/search_mail.html
+
+  Bugs and Todo List
+
+    Please report any bugs or requests for changes to the mailing list. The
+    current bugs / todo list can be found at
+    http://www.sourceforge.net/projects/speedycgi/. Go to the Bug Tracking
+    menu and select the group "bug" for bugs, or the group "rfe" for the
+    todo list.
+
+  Japanese Translation
+
+    http://member.nifty.ne.jp/hippo2000/perltips/CGI/SpeedyCGI.htm
+
+  Benchmarks
+
+    http://daemoninc.com/SpeedyCGI/benchmarks/
+
+  Success Stories
+
+    http://daemoninc.com/SpeedyCGI/success_stories/
+
+  Revision History
+
+    http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/Changes
 
 COPYRIGHT
     Copyright (C) 2001 Daemon Consulting Inc.

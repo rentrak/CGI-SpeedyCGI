@@ -18,13 +18,17 @@
  */
 
 typedef struct _OptRect {
-    const char		*name;
-    const unsigned char	name_len;
     const char		letter;
-    const unsigned char	type;
+    const char		type;
+    char		flags;
+    const unsigned char	name_len;
+    const char		*name;
     void		*value;
-    char		changed;	/* No longer default */
 } OptRec;
+
+/* For the flags field above */
+#define SPEEDY_OPTFL_CHANGED	0x01 /* No longer default */
+#define SPEEDY_OPTFL_MUST_FREE	0x02 /* value must be freed */
 
 void speedy_opt_init(const char * const *argv, const char * const *envp);
 void speedy_opt_read_shbang();
@@ -38,3 +42,5 @@ const char * const *speedy_opt_exec_argv();
 const char * const *speedy_opt_exec_envp();
 const char * const *speedy_opt_orig_argv();
 SPEEDY_INLINE const char *speedy_opt_script_fname();
+void speedy_opt_save();
+void speedy_opt_restore();

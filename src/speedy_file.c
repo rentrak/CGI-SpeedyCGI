@@ -25,7 +25,7 @@ speedy_file_t		*speedy_file_maddr;
 static int		file_fd = -1;
 static int		maplen;
 static int		file_locked;
-static char		*file_name;
+static char		*file_name, *saved_tmpbase;
 static struct stat	file_stat;
 static int		cur_state;
 static time_t		last_reopen;
@@ -122,6 +122,12 @@ static void remove_file() {
     unlink(file_name);
 }
 
+static void str_replace(char **ptr, char *newval) {
+    if (*ptr)
+	speedy_free(*ptr);
+    *ptr = newval;
+}
+
 static void file_lock() {
     static struct timeval file_create_time;
     struct flock fl;
@@ -135,8 +141,10 @@ static void file_lock() {
     fix_suspect_fd();
 #endif
 
-    /* Re-open the temp file occasionally */
-    if ((now = speedy_util_time()) - last_reopen > OPTVAL_RESTATTIMEOUT) {
+    /* Re-open the temp file occasionally or if tmpbase changed */
+    if ((now = speedy_util_time()) - last_reopen > OPTVAL_RESTATTIMEOUT ||
+	!saved_tmpbase || strcmp(saved_tmpbase, OPTVAL_TMPBASE) != 0)
+    {
 	last_reopen = now;
 	file_close2();
     }
@@ -144,8 +152,8 @@ static void file_lock() {
     while (tries--) {
 	/* If file is not open, open it */
 	if (file_fd == -1) {
-	    if (!file_name)
-		file_name = speedy_util_fname(FILE_REV, 'F');
+	    str_replace(&saved_tmpbase, speedy_util_strdup(OPTVAL_TMPBASE));
+	    str_replace(&file_name, speedy_util_fname(FILE_REV, 'F'));
 	    file_fd = speedy_util_pref_fd(
 		open(file_name, O_RDWR | O_CREAT, 0600), PREF_FD_FILE
 	    );
@@ -222,9 +230,6 @@ static void file_close() {
 	    remove_file();
     }
     file_close2();
-    if (file_name)
-	speedy_free(file_name);
-    file_name = NULL;
 }
 
 int speedy_file_size() {
