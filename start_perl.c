@@ -34,6 +34,18 @@
 
 
 #include "speedy.h"
+#include <patchlevel.h>
+
+/*
+ * Accomodate 5.004
+ */
+#if PATCHLEVEL < 5
+#   define PL_na na
+#   define newSVpvn(s,l) my_newSVpvn(s,l)
+    static SV *my_newSVpvn(char *s, int l) {
+	return l ? newSVpv(s, l) : newSVpv("",0);
+    }
+#endif
 
 static PerlInterpreter	*g_perl;	/* Perl interpreter */
 static SpeedyQueue	*g_q;		/* Queue pointer */
@@ -62,7 +74,6 @@ static void doabort();
 static Signal_t doabort_sig(int x);
 static void all_done();
 static Signal_t wakeup(int x);
-static SV *my_newSVpvn(char *s, int l);
 static void set_sigs();
 
 
@@ -179,7 +190,7 @@ static void doit(
      * Options variables in our library.  If our module is not installed,
      * these may come back null.
      */
-    if (pv.pv_opts_changed = perl_get_sv("CGI::SpeedyCGI::_opts_changed", TRUE))
+    if ((pv.pv_opts_changed = perl_get_sv("CGI::SpeedyCGI::_opts_changed", TRUE)))
 	sv_setiv(pv.pv_opts_changed, 0);
     if ((pv.pv_opts = perl_get_hv("CGI::SpeedyCGI::_opts", TRUE))) {
 	OptsRec *o;
@@ -322,7 +333,7 @@ static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
 		/* Find equals. Store key/val in %ENV */
 		if ((s = strchr(buf, '='))) {
 		    int i = s - buf;
-		    SV *sv = my_newSVpvn(s+1, sz-(i+1));
+		    SV *sv = newSVpvn(s+1, sz-(i+1));
 		    hv_store(pv->pv_env, buf, i, sv, 0);
 		    *s = '\0';
 		    my_setenv(buf, s+1);
@@ -336,7 +347,7 @@ static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
 
 	    /* Read in argv from stdin. */
 	    while ((sz = get_string(pio_in, &buf))) {
-		SV *sv = my_newSVpvn(buf, sz);
+		SV *sv = newSVpvn(buf, sz);
 		av_push(pv->pv_argv, sv);
 		Safefree(buf);
 	    }
@@ -441,12 +452,6 @@ static void all_done() {
 	perl_free(g_perl);
     }
     exit(0);
-}
-
-/* There is no newSVpvn in 5.004 */
-static SV *my_newSVpvn(char *s, int l) {
-    if (l == 0) return newSVpv("",0);
-    return newSVpv(s, l);
 }
 
 /* Catch pesky signals */

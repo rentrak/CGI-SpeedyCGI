@@ -1,5 +1,9 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+1.8.1  Sat Jun  5 12:30:43 PDT 1999
+
+	- Fix compile failure under perl 5.004.
+
 1.8  Thu Jun  3 13:20:00 PDT 1999
 
 	- Now has support for an Apache module front-end, mod_speedycgi.

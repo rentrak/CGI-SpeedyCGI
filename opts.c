@@ -83,7 +83,7 @@ void speedy_getopt(
     /* Fill in opts from environment first. */
     for (p = envp; *p; ++p) {
 	if (strncmp(*p, PRE, sizeof(PRE)-1) == 0) {
-	    for (rec = myopts; name = rec->name; ++rec) {
+	    for (rec = myopts; (name = rec->name); ++rec) {
 		int l = strlen(name);
 		if (strncmp(*p+sizeof(PRE)-1, name, l) == 0 &&
 		    (*p)[sizeof(PRE)+l-1] == '=')
@@ -146,7 +146,7 @@ static void opts_from_argv(
 
     /* Fill in opts from command line. */
     for (++argv, state = ST_PERLOPTS; *argv; ++argv) {
-	int c, j;
+	int c;
 	char *beg, *end;
 
 	for (beg = *argv; ; beg = end + 1) {
