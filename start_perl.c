@@ -206,9 +206,7 @@ static void doit(
     }
 
     /* Time to close stderr */
-    do_close(pv.pv_stdin,  TRUE);
-    do_close(pv.pv_stdout, TRUE);
-    do_close(pv.pv_stderr, TRUE);
+    close(2);
 
     /* We are not in the queue yet. Parent will connect without using queue. */
     g_queued = 0;
@@ -290,27 +288,25 @@ static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
     int sz, cmd_done, par_secret;
     char *buf, *s;
     char *emptyargs[] = {NULL};
-    PerlIO *pio_in, *pio_out, *pio_err;
 
-    /* Set up stdio */
-    if (!(pio_in  = PerlIO_fdopen(0, "r"))) doabort();
-    if (!(pio_out = PerlIO_fdopen(1, "w"))) doabort();
-    if (!(pio_err = PerlIO_fdopen(2, "w"))) doabort();
+    /* Set up perl STD* filehandles to have the PerlIO file pointers */
+    IoIFP(GvIOp(pv->pv_stdin))  = IoOFP(GvIOp(pv->pv_stdin))  = PerlIO_stdin();
+    IoIFP(GvIOp(pv->pv_stdout)) = IoOFP(GvIOp(pv->pv_stdout)) = PerlIO_stdout();
+    IoIFP(GvIOp(pv->pv_stderr)) = IoOFP(GvIOp(pv->pv_stderr)) = PerlIO_stderr();
 
-    IoIFP(GvIOp(pv->pv_stdin))  = IoOFP(GvIOp(pv->pv_stdin))  = pio_in;
-    IoIFP(GvIOp(pv->pv_stdout)) = IoOFP(GvIOp(pv->pv_stdout)) = pio_out;
-    IoIFP(GvIOp(pv->pv_stderr)) = IoOFP(GvIOp(pv->pv_stderr)) = pio_err;
+    /* Do "select STDOUT" */
     setdefout(pv->pv_stdout);
 
     /* Get secret word from parent. */
-    if (PerlIO_read(pio_in, &par_secret, sizeof(int)) != sizeof(int))
+    if (PerlIO_read(PerlIO_stdin(), &par_secret, sizeof(int)) != sizeof(int))
 	doabort();
+
+    /* Don't check security on the first run.  Slightly less secure,
+     * but our parent should already be connecting to us very quickly
+     * after the socket begins listening.  Saves us from having to pass
+     * the secret word across an exec call (which is problematic).
+     */
     if (par_secret != secret_word && numrun > 1) {
-	/* Don't check security on the first run.  Slightly less secure,
-	 * but our parent should already be connecting to us very quickly
-	 * after the socket begins listening.  Saves us from having to pass
-	 * the secret word across an exec call (which is problematic).
-	 */
 	/* Security Alert! */
 	sleep(10);
 	doabort();
@@ -318,7 +314,7 @@ static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
 
     /* Get commands from parent. */
     for (cmd_done = 0; !cmd_done; ) {
-	switch(PerlIO_getc(pio_in)) {
+	switch(PerlIO_getc(PerlIO_stdin())) {
 	case 'X':
 	case -1:
 	    /* Exit. */
@@ -328,7 +324,7 @@ static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
 	    hv_undef(pv->pv_env);
 
 	    /* Read in environment from stdin. */
-	    while ((sz = get_string(pio_in, &buf))) {
+	    while ((sz = get_string(PerlIO_stdin(), &buf))) {
 
 		/* Find equals. Store key/val in %ENV */
 		if ((s = strchr(buf, '='))) {
@@ -346,7 +342,7 @@ static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
 	    av_undef(pv->pv_argv);
 
 	    /* Read in argv from stdin. */
-	    while ((sz = get_string(pio_in, &buf))) {
+	    while ((sz = get_string(PerlIO_stdin(), &buf))) {
 		SV *sv = newSVpvn(buf, sz);
 		av_push(pv->pv_argv, sv);
 		Safefree(buf);
@@ -365,26 +361,28 @@ static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
     /* Terminate any forked children */
     if (getpid() != mypid) exit(0);
 
-    /* Flush any stdout. */
+    /* Flush output, in case perl's stdio/reopen below don't */
     PerlIO_flush(PerlIO_stdout());
     PerlIO_flush(PerlIO_stderr());
-                    
-    /* Shutdown stdio */
-    do_close(pv->pv_stdin,  TRUE);
-    do_close(pv->pv_stdout, TRUE);
-    do_close(pv->pv_stderr, TRUE);
 
-    /* Get rid of any buffered stdin. */
-    while (PerlIO_getc(PerlIO_stdin()) != -1)
-        ;   
+    /* Close down perl's STD* files (might not be the same as stdio files) */
+    do_close(pv->pv_stdout, FALSE);
+    do_close(pv->pv_stderr, FALSE);
+    do_close(pv->pv_stdin,  FALSE);
+
+    /* Get stdio files back in shape */
+    PerlIO_reopen("/dev/null", "r", PerlIO_stdin());
+    PerlIO_reopen("/dev/null", "w", PerlIO_stdout());
+    PerlIO_reopen("/dev/null", "w", PerlIO_stderr());
+    close(0); close(1); close(2);
+
+    /* Reset signals */
+    set_sigs();
 
     /* Hack for CGI.pm */
     if (perl_get_cv(CGI_CLEANUP, 0)) {
 	perl_call_argv(CGI_CLEANUP, G_DISCARD | G_NOARGS, emptyargs);
     }
-
-    /* Reset signals */
-    set_sigs();
 }
 
 
@@ -405,7 +403,6 @@ static int get_string(PerlIO *pio_in, char **buf) {
     }
     return sz;
 }
-
 
 /* Wakeup on timeout */
 static Signal_t wakeup(int x) {

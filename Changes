@@ -1,5 +1,9 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+1.8.2  Sun Jun  6 04:01:53 GMT 1999
+
+	- Make I/O more compatible with PerlIO
+
 1.8.1  Sat Jun  5 12:30:43 PDT 1999
 
 	- Fix compile failure under perl 5.004.

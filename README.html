@@ -1,11 +1,10 @@
-    <HTML> 
-	<HEAD> 
-	    <TITLE>CGI::SpeedyCGI - Speed up CGI scripts by running them persistently
+<HTML>
+<HEAD>
+<TITLE>CGI::SpeedyCGI - Speed up CGI scripts by running them persistently</TITLE>
+<LINK REV="made" HREF="mailto:sam@angel.daemoninc.com">
+</HEAD>
 
-</TITLE> 
-	</HEAD>
-
-	<BODY>
+<BODY>
 
 <!-- INDEX BEGIN -->
 
@@ -34,648 +33,437 @@
 
 <HR>
 <P>
-<H1><A NAME="NAME">NAME
-
-</A></H1>
-CGI::SpeedyCGI - Speed up CGI scripts by running them persistently
-
-
+<H1><A NAME="NAME">NAME</A></H1>
 <P>
+CGI::SpeedyCGI - Speed up CGI scripts by running them persistently
 
 <P>
 <HR>
-<H1><A NAME="SYNOPSIS">SYNOPSIS
-
-</A></H1>
+<H1><A NAME="SYNOPSIS">SYNOPSIS</A></H1>
+<P>
 <PRE> #!/usr/local/bin/speedy
 </PRE>
-
 <P>
-
 <PRE> ### Your CGI Script Here
 </PRE>
-
 <P>
-
 <PRE> ##
  ## Optionally, use the CGI::SpeedyCGI module for various things
  ##
 </PRE>
-
 <P>
-
 <PRE> # Create a SpeedyCGI object
  use CGI::SpeedyCGI;
  my $sp = CGI::SpeedyCGI-&gt;new;
 </PRE>
-
 <P>
-
 <PRE> # See if we are running under SpeedyCGI or not.
  print &quot;Running under speedy=&quot;, $sp-&gt;i_am_speedy ? 'yes' : 'no', &quot;\n&quot;;
 </PRE>
-
 <P>
-
 <PRE> # Set up a shutdown handler
  $sp-&gt;set_shutdown_handler(sub { do something here });
 </PRE>
-
 <P>
-
 <PRE> # Set/get some SpeedyCGI options
  $sp-&gt;setopt('timeout', 30);
  print &quot;maxruns=&quot;, $sp-&gt;getopt('maxruns'), &quot;\n&quot;;
 </PRE>
-
-<P>
-
 <P>
 <HR>
-<H1><A NAME="DESCRIPTION">DESCRIPTION
-
-</A></H1>
+<H1><A NAME="DESCRIPTION">DESCRIPTION</A></H1>
+<P>
 SpeedyCGI is a way to run CGI perl scripts persistently, which usually
 makes them run much more quickly. Converting scripts to use SpeedyCGI is in
 most cases as simple has changing the interpreter line at the top of the
 script from
 
-
 <P>
-
 <PRE>    #!/usr/local/bin/perl
 </PRE>
-
 <P>
-
 to
 
-
 <P>
-
 <PRE>    #!/usr/local/bin/speedy
 </PRE>
-
 <P>
-
 After the script is initially run, instead of exiting, SpeedyCGI keeps the
 perl interpreter running in memory. During subsequent runs, this
 interpreter is used to handle new requests, instead of starting a new perl
 interpreter for each execution.
 
-
 <P>
-
 SpeedyCGI conforms to the CGI specification, and does not work inside the
 web server. A very fast cgi-bin (written in C) is executed for each
 request. This fast cgi-bin then contacts the persistent Perl process, which
 is usually already in memory, to do the work and return the results.
 
-
 <P>
-
 Since all of these processes run outside the web server, they can't cause
 problems for the web server itself. Also, each perl program runs as its own
 Unix process, so one program can't interfere with another. Command line
 options can also be used to deal with programs that have memory leaks or
 other problems that might keep them from otherwise running persistently.
 
-
-<P>
-
 <P>
 <HR>
-<H1><A NAME="OPTIONS">OPTIONS
-
-</A></H1>
+<H1><A NAME="OPTIONS">OPTIONS</A></H1>
 <P>
 <HR>
-<H2><A NAME="How_to_Set">How to Set
-
-</A></H2>
+<H2><A NAME="How_to_Set">How to Set</A></H2>
+<P>
 SpeedyCGI options can be set in several ways:
 
-
-<P>
-
 <DL>
-<DT><STRONG><A NAME="item_Command">Command Line
-
-</A></STRONG><DD>
+<DT><STRONG><A NAME="item_Command">Command Line</A></STRONG><DD>
+<P>
 The speedy command line is the same as for regular perl, with the exception
 that SpeedyCGI specific options can be passed in after a ``--''.
 
-
 <P>
-
 For example:
 
-
 <P>
-
 <PRE>        #!/usr/local/bin/speedy -w -- -t300
 </PRE>
-
 <P>
-
 at the top of your script will call SpeedyCGI with the perl option ``<CODE>-w</CODE>'' and will pass the ``<CODE>-t</CODE>'' option to speedy, telling it to exit if no new requests have been
 received after 300 seconds.
 
-
-<P>
-
 </DL>
 <DL>
-<DT><STRONG><A NAME="item_Environment">Environment
-
-</A></STRONG><DD>
+<DT><STRONG><A NAME="item_Environment">Environment</A></STRONG><DD>
+<P>
 Environment variables can be used to pass in options. This can only be done
 before the initial execution (ie not from within the script itself).
 
-
-<P>
-
 </DL>
 <DL>
-<DT><STRONG><A NAME="item_CGI">CGI::SpeedyCGI
-
-</A></STRONG><DD>
+<DT><STRONG><A NAME="item_CGI">CGI::SpeedyCGI</A></STRONG><DD>
+<P>
 The CGI::SpeedyCGI module provides a method, setopt, to set options from
 within the perl script at runtime. There is also a getopt method to
 retrieve the current options.
 
-
-<P>
-
 </DL>
 <DL>
-<DT><STRONG><A NAME="item_mod_speedycgi">mod_speedycgi
-
-</A></STRONG><DD>
+<DT><STRONG><A NAME="item_mod_speedycgi">mod_speedycgi</A></STRONG><DD>
+<P>
 If you are using the optional Apache module, SpeedyCGI options can be set
 in the httpd.conf file.
-
-
-<P>
 
 </DL>
 <P>
 <HR>
-<H2><A NAME="Options_Available">Options Available
-
-</A></H2>
+<H2><A NAME="Options_Available">Options Available</A></H2>
+<P>
 The following options are available:
 
-
-<P>
-
 <DL>
-<DT><STRONG><A NAME="item_TIMEOUT">TIMEOUT
-
-</A></STRONG><DD>
+<DT><STRONG><A NAME="item_TIMEOUT">TIMEOUT</A></STRONG><DD>
+<P>
 <PRE>    Command Line        : -tN
     Environment         : SPEEDY_TIMEOUT
     CGI::SpeedyCGI      : TIMEOUT
     mod_speedycgi       : SpeedyTimeout
     Default Value       : 3600 (one hour)
 </PRE>
-
 <P>
-
 <PRE>    Description:
 </PRE>
-
 <P>
-
 <PRE>        If no new requests have been received after N
         seconds, exit the persistent perl interpreter.
         Use 0 to indicate no timeout.
 </PRE>
-
+<DT><STRONG><A NAME="item_MAXRUNS">MAXRUNS</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_MAXRUNS">MAXRUNS
-
-</A></STRONG><DD>
 <PRE>    Command Line        : -rN
     Environment         : SPEEDY_MAXRUNS
     CGI::SpeedyCGI      : MAXRUNS
     mod_speedycgi       : SpeedyMaxruns
     Default Value       : 0 (ie no max)
 </PRE>
-
 <P>
-
 <PRE>    Description:
 </PRE>
-
 <P>
-
 <PRE>        Once the perl interpreter has run N times, exit.
 </PRE>
-
+<DT><STRONG><A NAME="item_TMPBASE">TMPBASE</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_TMPBASE">TMPBASE
-
-</A></STRONG><DD>
 <PRE>    Command Line        : -Tstr
     Environment         : SPEEDY_TMPBASE
     CGI::SpeedyCGI      : n/a
     mod_speedycgi       : SpeedyTmpbase
     Default Value       : /tmp/speedy
 </PRE>
-
 <P>
-
 <PRE>    Description:
 </PRE>
-
 <P>
-
 <PRE>        Use the given prefix for creating temporary files.
         This must be a filename prefix, not a directory name.
 </PRE>
-
+<DT><STRONG><A NAME="item_BUFSIZ_POST">BUFSIZ_POST</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_BUFSIZ_POST">BUFSIZ_POST
-
-</A></STRONG><DD>
 <PRE>    Command Line        : -bN
     Environment         : SPEEDY_BUFSIZ_POST
     CGI::SpeedyCGI      : n/a
     mod_speedycgi       : n/a
     Default Value       : 1024
 </PRE>
-
 <P>
-
 <PRE>    Description:
 </PRE>
-
 <P>
-
 <PRE>        Use N bytes for the buffer that sends data
         to the CGI script.
 </PRE>
-
+<DT><STRONG><A NAME="item_BUFSIZ_GET">BUFSIZ_GET</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_BUFSIZ_GET">BUFSIZ_GET
-
-</A></STRONG><DD>
 <PRE>    Command Line        : -BN
     Environment         : SPEEDY_BUFSIZ_GET
     CGI::SpeedyCGI      : n/a
     mod_speedycgi       : n/a
     Default Value       : 8192
 </PRE>
-
 <P>
-
 <PRE>    Description:
 </PRE>
-
 <P>
-
 <PRE>        Use N bytes for the buffer that receives data
         from the CGI script.
 </PRE>
-
-<P>
-
 </DL>
 <P>
 <HR>
-<H1><A NAME="METHODS">METHODS
-
-</A></H1>
+<H1><A NAME="METHODS">METHODS</A></H1>
+<P>
 The following methods are available in the CGI::SpeedyCGI module.
 
-
-<P>
-
 <DL>
-<DT><STRONG><A NAME="item_new">new     
-
-</A></STRONG><DD>
+<DT><STRONG><A NAME="item_new">new </A></STRONG><DD>
+<P>
 Create a new CGI::SpeedyCGI object.
 
-
 <P>
-
 <PRE>    my $sp = CGI::SpeedyCGI-&gt;new;
 </PRE>
-
+<DT><STRONG><A NAME="item_set_shutdown_handler">set_shutdown_handler($function_ref)</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_set_shutdown_handler">set_shutdown_handler($function_ref)
-
-</A></STRONG><DD>
 Register a function that will be called right before the perl interpreter
 exits. This is <STRONG>not</STRONG> at the end of each request, it is when the perl interpreter decides to exit
 completely (due to a timeout, maxruns, etc)
 
-
 <P>
-
 <PRE>    $sp-&gt;set_shutdown_handler(sub {$dbh-&gt;logout});
 </PRE>
-
+<DT><STRONG><A NAME="item_i_am_speedy">i_am_speedy</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_i_am_speedy">i_am_speedy
-
-</A></STRONG><DD>
 Returns a boolean telling whether this script is running under SpeedyCGI or
 not. A CGI script can run under regular perl, or under SpeedyCGI. This
 method allows the script to tell which environment it is in.
 
-
 <P>
-
 <PRE>    $sp-&gt;i_am_speedy;
 </PRE>
-
+<DT><STRONG><A NAME="item_setopt">setopt($optname, $value)</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_setopt">setopt($optname, $value)
-
-</A></STRONG><DD>
 Set one of the SpeedyCGI options given in the OPTIONS section. Returns the
 previous value that the option had. <CODE>$optname</CODE> is
 case-insensitive.
 
-
 <P>
-
 <PRE>    $sp-&gt;setopt('TIMEOUT', 300);
 </PRE>
-
+<DT><STRONG><A NAME="item_getopt">getopt($optname)</A></STRONG><DD>
 <P>
-
-<DT><STRONG><A NAME="item_getopt">getopt($optname)
-
-</A></STRONG><DD>
 Return the current value of one of the SpeedyCGI options.
 <CODE>$optname</CODE> is case-insensitive.
 
-
 <P>
-
 <PRE>    $sp-&gt;getopt('TIMEOUT');
 </PRE>
-
-<P>
-
 </DL>
 <P>
 <HR>
-<H1><A NAME="INSTALLATION">INSTALLATION
-
-</A></H1>
+<H1><A NAME="INSTALLATION">INSTALLATION</A></H1>
+<P>
 SpeedyCGI has been tried with perl versions 5.004_04 and 5.005_02, and
 under Solaris 2.6, Redhat Linux 5.1, and FreeBSD 3.1. There may be problems
 wither other OSes or earlier versions of Perl.
 
-
 <P>
-
 To install, do the following:
 
-
 <P>
-
 <PRE>    perl Makefile.PL
     make
     make test
     make install
 </PRE>
-
 <P>
-
 This will install a ``speedy'' binary in the same directory where ``perl''
 was installed. If you want to install the optional Apache module, see the
 README in the apache directory.
 
-
-<P>
-
 <P>
 <HR>
-<H1><A NAME="BUGS">BUGS
-
-</A></H1>
+<H1><A NAME="BUGS">BUGS</A></H1>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Under heavy load we may run out of sockets (especially on FreeBSD), since
 they hang around in a TIME_WAIT state after closing. Might do better with
 fifos (named pipes).
 
-
 <P>
-
 Workaround on FreeBSD is to increase the ``maxusers'' value in the kernel
 config file and compile/install a new kernel. The default value of 32 is
 too low -- use 256 or more.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 On Solaris w/Netscape Enterprise 3.x, occasionally the CGI front-end gets
 stuck in the <CODE>poll()</CODE> call in speedy.c.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 ``make test'' reportedly fails under sun4 sunos 4.1.4
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Release 1.6 reportedly runs very slow on Dec Alpha running Unix 4.0b and
 fails the intial_eof test. 1.5 runs OK.
-
-
-<P>
 
 </UL>
 <P>
 <HR>
-<H1><A NAME="TODO">TODO
-
-</A></H1>
+<H1><A NAME="TODO">TODO</A></H1>
 <UL>
-<LI><STRONG></STRONG>
-Need benchmarks of speedy vs mod_perl
-
-
+<LI>
 <P>
+Need benchmarks of speedy vs mod_perl
 
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Pass file descriptors 0/1 to the Perl prog using I_SENDFD on systems that
 support it (like Solaris). Avoids the overhead of copying through the CGI
 front-end.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Need to figure out whether speedyhandler still works/is useful, and if so
 document how to use it.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 In start_perl, use a <CODE>poll()</CODE> timeout instead of an alarm to
 implement the timeout while waiting for an accept. It's cleaner than a
 signal.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Need to allow more program control from perl via the CGI::SpeedyCGI module.
 Should be able to have the perl prog wait for a new connection, etc.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Need an option to limit the maximum number of processes per cgi-bin.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Add option to check the amount of memory in use and exit when it gets too
 high.
 
-
-<P>
-
 </UL>
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 Need tests for:
 
-
-<P>
-
 <UL>
-<LI><STRONG></STRONG>
+<LI>
+<P>
 getopt, setopt and i_am_speedy methods.
 
-
+<LI>
 <P>
-
-<LI><STRONG></STRONG>
 multiple persistent perl processes
 
-
+<LI>
 <P>
-
-<LI><STRONG></STRONG>
 mod_speedycgi
-
-
-<P>
 
 </UL>
 </UL>
 <UL>
-<LI><STRONG></STRONG>
-Add option to have a single perl process handle multiple cgi-bin's.
-
-
+<LI>
 <P>
+Add option to have a single perl process handle multiple cgi-bin's.
 
 </UL>
 <P>
 <HR>
-<H1><A NAME="MAILING_LIST">MAILING LIST
-
-</A></H1>
-<A HREF="MAILTO:speedycgi@newlug.org.">speedycgi@newlug.org.</A> Subscribe
+<H1><A NAME="MAILING_LIST">MAILING LIST</A></H1>
+<P>
+<A HREF="mailto:speedycgi@newlug.org.">speedycgi@newlug.org.</A> Subscribe
 by sending a message to <A
-HREF="MAILTO:speedycgi-request@newlug.org">speedycgi-request@newlug.org</A>
+HREF="mailto:speedycgi-request@newlug.org">speedycgi-request@newlug.org</A>
 with ``subscribe'' in the body.
 
-
 <P>
-
 Archive is at <A
 HREF="http://newlug.org/mailArchive/speedycgi">http://newlug.org/mailArchive/speedycgi</A>
 
 
-
-<P>
-
 <P>
 <HR>
-<H1><A NAME="DOWNLOADING">DOWNLOADING
-
-</A></H1>
+<H1><A NAME="DOWNLOADING">DOWNLOADING</A></H1>
+<P>
 SpeedyCGI can be retrieved from:
 
-
 <P>
-
 <PRE>    <A HREF="http://daemoninc.com/speedycgi">http://daemoninc.com/speedycgi</A>
     <A HREF="http://www.cpan.org/modules/by-authors/id/H/HO/HORROCKS/">http://www.cpan.org/modules/by-authors/id/H/HO/HORROCKS/</A>
 </PRE>
-
-<P>
-
 <P>
 <HR>
-<H1><A NAME="AUTHOR">AUTHOR
-
-</A></H1>
+<H1><A NAME="AUTHOR">AUTHOR</A></H1>
+<P>
 <PRE>    Sam Horrocks
     Daemon Consulting Inc.
     <A HREF="http://daemoninc.com">http://daemoninc.com</A>
     sam@daemoninc.com
 </PRE>
-
-<P>
-
 <P>
 <HR>
-<H1><A NAME="COPYRIGHT">COPYRIGHT
-
-</A></H1>
+<H1><A NAME="COPYRIGHT">COPYRIGHT</A></H1>
+<P>
 Copyright (c) 1999 Daemon Consulting Inc. All rights reserved. This program
 is free software; you can redistribute it and/or modify it under the same
 terms as Perl itself.
 
+</BODY>
 
-<P>
-
-</DL>
-    </BODY>
-
-    </HTML>
+</HTML>
