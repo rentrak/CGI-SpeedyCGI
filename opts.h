@@ -32,7 +32,6 @@
  *
  */
 
-
 typedef struct {
     char	*name;
     char	opt;
@@ -47,12 +46,15 @@ typedef struct {
 #define OVAL_STR(o)	((char*)(o).value)
 
 void speedy_getopt(
-    OptsRec myopts[], int numopts, char *argv[], char *envp[],
+    OptsRec myopts[], char *argv[], char *envp[],
     char ***scr_argv, char ***perl_argv
 );
+void speedy_addopts_file(
+    OptsRec myopts[], char *fname, char ***perl_argv
+);
+
 
 #ifdef OPTS_DEBUG
-void opts_debug(OptsRec *opts, int numopts, char **scr_argv, char **perl_argv);
+void opts_debug(OptsRec *opts, char **scr_argv, char **perl_argv);
 void doargv(char *name, char **argv);
 #endif
-

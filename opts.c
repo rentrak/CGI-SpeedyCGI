@@ -38,8 +38,13 @@
 #define xispc(c) (c == '\n' || c == '\t' || c == ' ')
 
 static void setval(OptsRec *rec, char *value);
-static void addargv(int *argc, char ***argv, char *toadd);
+static void addargv(int *argc, char ***argv, char *toadd, int insert);
 static void initargv(int *argc, char ***argv);
+static void opts_from_argv(
+    OptsRec myopts[], char *argv[],
+    char ***scr_argv, char ***perl_argv, int scr_argc, int perl_argc,
+    int insert
+);
 
 /*
  * Command Line:
@@ -67,34 +72,77 @@ static void initargv(int *argc, char ***argv);
 #define ST_SPEEDYOPTS	1
 
 void speedy_getopt(
-    OptsRec myopts[], int numopts, char *argv[], char *envp[],
+    OptsRec myopts[], char *argv[], char *envp[],
     char ***scr_argv, char ***perl_argv
 )
 {
-    char **p;
-    int i, state, perl_argc, scr_argc;
-
-    /* Init perl argv */
-    initargv(&perl_argc, perl_argv);
-    addargv(&perl_argc, perl_argv, "");
-
-    /* Init script argv */
-    initargv(&scr_argc, scr_argv);
+    char **p, *name;
+    int perl_argc, scr_argc;
+    OptsRec *rec;
 
     /* Fill in opts from environment first. */
     for (p = envp; *p; ++p) {
 	if (strncmp(*p, PRE, sizeof(PRE)-1) == 0) {
-	    for (i = 0; i < numopts; ++i) {
-		char *name = myopts[i].name;
+	    for (rec = myopts; name = rec->name; ++rec) {
 		int l = strlen(name);
 		if (strncmp(*p+sizeof(PRE)-1, name, l) == 0 &&
 		    (*p)[sizeof(PRE)+l-1] == '=')
 		{
-		    setval(myopts +i, *p+sizeof(PRE)+l);
+		    setval(rec, *p+sizeof(PRE)+l);
 		}
 	    }
 	}
     }
+
+    /* Init perl argv */
+    initargv(&perl_argc, perl_argv);
+    addargv(&perl_argc, perl_argv, "", 0);
+
+    /* Init script argv */
+    initargv(&scr_argc, scr_argv);
+
+    opts_from_argv(
+        myopts, argv, scr_argv, perl_argv, scr_argc, perl_argc, 0
+    );
+}
+
+/* Read the given filename for options on the #! line at top. */
+void speedy_addopts_file(
+    OptsRec myopts[], char *fname, char ***perl_argv
+)
+{
+    int file_size, fd;
+    char buf[512], *s, *argv[3];
+
+    if ((fd = open(fname, O_RDONLY, 0600)) != -1) {
+	if ((file_size = read(fd, buf, sizeof(buf))) > 1 &&
+	    buf[0] == '#' && buf[1] == '!')
+	{
+	    /* Null-terminate */
+	    buf[file_size-1] = '\0';
+	    if ((s = strchr(buf, '\n'))) *s = '\0';
+
+	    /* Find space after command */
+	    if ((s = strchr(buf, ' '))) {
+		argv[0] = ""; argv[1] = s; argv[2] = NULL;
+		opts_from_argv(
+		    myopts, argv, NULL, perl_argv,
+		    0, speedy_argc(*perl_argv), 1
+		);
+	    }
+	}
+	close(fd);
+    }
+}
+
+static void opts_from_argv(
+    OptsRec myopts[], char *argv[],
+    char ***scr_argv, char ***perl_argv, int scr_argc, int perl_argc,
+    int insert
+)
+{
+    int state;
+    OptsRec *rec;
 
     /* Fill in opts from command line. */
     for (++argv, state = ST_PERLOPTS; *argv; ++argv) {
@@ -117,11 +165,11 @@ void speedy_getopt(
 	    if (beg[0] != '-') {
 		/* End of perl/speedy opts, start of argv[0] for script */
 		*end = c;
-		addargv(&perl_argc, perl_argv, beg);
-		addargv(&scr_argc, scr_argv, beg);
+		addargv(&perl_argc, perl_argv, beg, insert);
+		if (scr_argv) addargv(&scr_argc, scr_argv, beg, insert);
 		for (++argv; *argv; ++argv) {
-		    addargv(&perl_argc, perl_argv, *argv);
-		    addargv(&scr_argc, scr_argv, *argv);
+		    addargv(&perl_argc, perl_argv, *argv, insert);
+		    if (scr_argv) addargv(&scr_argc, scr_argv, *argv, insert);
 		}
 		return;
 	    } else {
@@ -131,14 +179,13 @@ void speedy_getopt(
 		    if (beg[1] == '-') {
 			state = ST_SPEEDYOPTS;
 		    } else {
-			addargv(&perl_argc, perl_argv, beg);
+			addargv(&perl_argc, perl_argv, beg, insert);
 		    }
 		    break;
 
 		    case ST_SPEEDYOPTS:
-		    for (j = 0; j < numopts; ++j) {
-			OptsRec *r = myopts + j;
-			if (r->opt == beg[1]) {
+		    for (rec = myopts; rec->name; ++rec) {
+			if (rec->opt == beg[1]) {
 			    if (!beg[2]) {
 				fprintf(stderr,
 				    "missing argument to speedy option -%c\n",
@@ -146,11 +193,11 @@ void speedy_getopt(
 				);
 				exit(1);
 			    }
-			    setval(r, beg+2);
+			    setval(rec, beg+2);
 			    break;
 			}
 		    }
-		    if (j == numopts) {
+		    if (!rec->name) {
 			fprintf(stderr, "unknown speedy option -%c\n", beg[1]);
 			exit(1);
 		    }
@@ -174,10 +221,17 @@ static void setval(OptsRec *rec, char *value) {
     }
 }
 
-static void addargv(int *argc, char ***argv, char *toadd) {
+static void addargv(int *argc, char ***argv, char *toadd, int insert) {
     Renew(*argv, (*argc)+2, char*);
-    (*argv)[(*argc)++] = speedy_strdup(toadd);
-    (*argv)[*argc] = NULL;
+    toadd = speedy_strdup(toadd);
+    if (insert) {
+	/* Put new option at one position before the end */
+	(*argv)[*argc] = (*argv)[(*argc)-1];
+	(*argv)[(*argc)-1] = toadd;
+    } else {
+	(*argv)[*argc] = toadd;
+    }
+    (*argv)[++(*argc)] = NULL;
 }
 
 static void initargv(int *argc, char ***argv) {
@@ -188,14 +242,33 @@ static void initargv(int *argc, char ***argv) {
 
 #ifdef OPTS_DEBUG
 void doargv(char *name, char **argv);
+static void dumpem(
+    OptsRec *opts, char **scr_argv, char **perl_argv
+);
 
-void opts_debug(OptsRec *opts, int numopts, char **scr_argv, char **perl_argv) {
+void opts_debug(OptsRec *opts, char **scr_argv, char **perl_argv) {
+
+    printf("Before reading #! line\n");
+    dumpem(opts, scr_argv, perl_argv);
+
+    speedy_addopts_file(
+	opts, scr_argv[0], &perl_argv
+    );
+
+    printf("After adding opts from #! line in file\n");
+    dumpem(opts, scr_argv, perl_argv);
+    exit(0);
+}
+
+static void dumpem(
+    OptsRec *opts, char **scr_argv, char **perl_argv
+) {
     int i;
     OptsRec *o;
+
     printf("scr_argv=%x perl_argv=%x\n", (int)scr_argv, (int)perl_argv);
 
-    for (i = 0; i < numopts; ++i) {
-	o = opts + i;
+    for (o = opts; o->name; ++o) {
 	switch(o->type)
 	{
 	    case OTYPE_INT:
@@ -209,7 +282,6 @@ void opts_debug(OptsRec *opts, int numopts, char **scr_argv, char **perl_argv) {
     }
     doargv("perl_argv", perl_argv);
     doargv("scr_argv", scr_argv);
-    exit(0);
 }
 
 void doargv(char *name, char **argv) {

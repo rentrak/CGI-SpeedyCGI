@@ -33,14 +33,6 @@
  */
 
 
-int speedy_make_socket();
-
-void speedy_fillin_sin(struct sockaddr_in *sa, unsigned short port);
-
 char *speedy_strdup(char *s);
 
 int speedy_argc(char **p);
-
-int speedy_connect(unsigned short port);
-
-int speedy_make_secret(struct timeval *start_time);

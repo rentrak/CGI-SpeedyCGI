@@ -1,168 +1,277 @@
+NAME
+    CGI::SpeedyCGI - Speed up CGI scripts by running them persistently
 
-Overview
-========
+SYNOPSIS
+     #!/usr/local/bin/speedy
 
-SpeedyCGI is a way to run CGI perl scripts persistently, which usually
-makes them run much more quickly.  Converting scripts to use SpeedyCGI is
-in most cases as simple has changing the interpreter line at the top of
-the script from
+     ### Your CGI Script Here
 
-    #!/usr/local/bin/perl
+     ##
+     ## Optionally, use the CGI::SpeedyCGI module for various things
+     ##
 
-to
+     # Create a SpeedyCGI object
+     use CGI::SpeedyCGI;
+     my $sp = CGI::SpeedyCGI->new;
 
-    #!/usr/local/bin/speedy
+     # See if we are running under SpeedyCGI or not.
+     print "Running under speedy=", $sp->i_am_speedy ? 'yes' : 'no', "\n";
 
-After the script is initially run, instead of exiting, SpeedyCGI keeps the
-perl interpreter running in memory.  During subsequent runs, this interpreter
-is used to handle new requests, instead of starting a new perl interpreter
-for each execution.
+     # Set up a shutdown handler
+     $sp->set_shutdown_handler(sub { do something here });
 
-SpeedyCGI conforms to the CGI specification, and does not work inside the
-web server.  A very fast cgi-bin (written in C) is executed for each request.
-This fast cgi-bin then contacts the persistent Perl process, which is usually
-already in memory, to do the work and return the results.
+     # Set/get some SpeedyCGI options
+     $sp->setopt('timeout', 30);
+     print "maxruns=", $sp->getopt('maxruns'), "\n";
 
-Since all of these processes run outside the web server, they can't cause
-problems for the web server itself.  Also, each perl program runs as its own
-Unix process, so one program can't interfere with another.  Command line
-options can also be used to deal with programs that have memory leaks or
-other problems that might keep them from otherwise running persistently.
+DESCRIPTION
+    SpeedyCGI is a way to run CGI perl scripts persistently, which usually
+    makes them run much more quickly. Converting scripts to use SpeedyCGI is
+    in most cases as simple has changing the interpreter line at the top of
+    the script from
 
+        #!/usr/local/bin/perl
 
-Installation
-============
+    to
 
-SpeedyCGI has been tried with perl versions 5.004_04 and 5.005_02,
-and under Solaris 2.6, Redhat Linux 5.1, and FreeBSD 3.1.  There
-may be problems wither other OSes or earlier versions of Perl.
+        #!/usr/local/bin/speedy
 
-To install, do the following:
+    After the script is initially run, instead of exiting, SpeedyCGI keeps
+    the perl interpreter running in memory. During subsequent runs, this
+    interpreter is used to handle new requests, instead of starting a new
+    perl interpreter for each execution.
 
-    perl Makefile.PL
-    make
-    make test
-    make install
+    SpeedyCGI conforms to the CGI specification, and does not work inside
+    the web server. A very fast cgi-bin (written in C) is executed for each
+    request. This fast cgi-bin then contacts the persistent Perl process,
+    which is usually already in memory, to do the work and return the
+    results.
 
-This will install a "speedy" binary in the same directory where "perl"
-was installed.
+    Since all of these processes run outside the web server, they can't
+    cause problems for the web server itself. Also, each perl program runs
+    as its own Unix process, so one program can't interfere with another.
+    Command line options can also be used to deal with programs that have
+    memory leaks or other problems that might keep them from otherwise
+    running persistently.
 
+OPTIONS
+  How to Set
 
-Using SpeedyCGI
-===============
+    SpeedyCGI options can be set in several ways:
 
-To convert a script to use SpeedyCGI, change the #! interpreter line to
-call "speedy" instead of "perl".  The "speedy" binary, for the most part
-accepts the same command line options as perl.
+    Command Line
+        The speedy command line is the same as for regular perl, with the
+        exception that SpeedyCGI specific options can be passed in after a
+        "--".
 
-The speedy binary also accepts its own set of options, which must be put
-after a "--" at the end of the perl options.  The speedy binary accepts
-the following options:
+        For example:
 
-	-tN		If no new requests have been received after N
-			seconds, exit the persistent perl interpreter.
-			The default is 3600 (one hour).  Use 0 to indicate
-			no timeout.
+                #!/usr/local/bin/speedy -w -- -t300
 
-	-rN		Once the perl interpreter has run N times, exit.
-			The default is 0 (no max).
+        at the top of your script will call SpeedyCGI with the perl option
+        "`-w'" and will pass the "`-t'" option to speedy, telling it to exit
+        if no new requests have been received after 300 seconds.
 
-	-Tprefix	Use the given prefix for creating temporary files.
-			This must be a filename prefix, not a directory name.
-			The default is "/tmp/speedy".
-	
-	-bN		Use N bytes for the buffer that sends data to
-			the CGI script.  Default is 1024.
+    Environment
+        Environment variables can be used to pass in options. This can only
+        be done before the initial execution (ie not from within the script
+        itself).
 
-	-BN		Use N bytes for the buffer that receives data from
-			the CGI script.  Default is 8192.
+    CGI::SpeedyCGI
+        The CGI::SpeedyCGI module provides a method, setopt, to set options
+        from within the perl script at runtime. There is also a getopt
+        method to retrieve the current options.
 
-For example:
-	
-	#!/usr/local/bin/speedy -w -- -t300
+    mod_speedycgi
+        If you are using the optional Apache module, SpeedyCGI options can
+        be set in the httpd.conf file.
 
-Will call SpeedyCGI with the perl option "-w" and will tell speedy
-to exit if no new requests have been received after 300 seconds.
+  Options Available
 
+    The following options are available:
 
-Bugs
-====
+    TIMEOUT
+            Command Line        : -tN
+            Environment         : SPEEDY_TIMEOUT
+            CGI::SpeedyCGI      : TIMEOUT
+            mod_speedycgi       : SpeedyTimeout
+            Default Value       : 3600 (one hour)
 
-Under heavy load we run out of sockets, since they hang around in a
-TIME_WAIT state after closing.  Might do better with fifos (named pipes).
+            Description:
 
-On Solaris, sometimes the CGI front-end gets stuck in the poll() call
-in speedy.c.
+                If no new requests have been received after N
+                seconds, exit the persistent perl interpreter.
+                Use 0 to indicate no timeout.
 
-Speedy command line options do not work with #! in Solaris.  Workaround
-is to pass in SPEEDY_* environment variables instead -- see speedy.h for
-a list.
+    MAXRUNS
+            Command Line        : -rN
+            Environment         : SPEEDY_MAXRUNS
+            CGI::SpeedyCGI      : MAXRUNS
+            mod_speedycgi       : SpeedyMaxruns
+            Default Value       : 0 (ie no max)
 
-"make test" reportedly fails under sun4 sunos 4.1.4
+            Description:
 
-Release 1.6 reportedly runs very slow on Dec Alpha running Unix 4.0b
-and fails the intial_eof test.  1.5 runs OK.
+                Once the perl interpreter has run N times, exit.
 
+    TMPBASE
+            Command Line        : -Tstr
+            Environment         : SPEEDY_TMPBASE
+            CGI::SpeedyCGI      : n/a
+            mod_speedycgi       : SpeedyTmpbase
+            Default Value       : /tmp/speedy
 
-To Do
-=====
+            Description:
 
-Document the environment variable options.
+                Use the given prefix for creating temporary files.
+                This must be a filename prefix, not a directory name.
 
-Write mod_speedycgi as an optional replacement for the CGI front-end.
-This would avoid a fork/exec for each request.
+    BUFSIZ_POST
+            Command Line        : -bN
+            Environment         : SPEEDY_BUFSIZ_POST
+            CGI::SpeedyCGI      : n/a
+            mod_speedycgi       : n/a
+            Default Value       : 1024
 
-Write a test for multiple persistent perl processes.
+            Description:
 
-Need benchmarks of speedy vs mod_perl
+                Use N bytes for the buffer that sends data
+                to the CGI script.
 
-Pass file descriptors 0/1 to the Perl prog using I_SENDFD on systems
-that support it (like Solaris).  Avoids the overhead of copying
-through the CGI front-end.
+    BUFSIZ_GET
+            Command Line        : -BN
+            Environment         : SPEEDY_BUFSIZ_GET
+            CGI::SpeedyCGI      : n/a
+            mod_speedycgi       : n/a
+            Default Value       : 8192
 
-Need to figure out whether speedyhandler still works/is useful, and if so
-document how to use it.
+            Description:
 
-In start_perl, use a poll() timeout instead of an alarm to implement the
-timeout while waiting for an accept.  It's cleaner than a signal.
+                Use N bytes for the buffer that receives data
+                from the CGI script.
 
-Need to allow more program control from perl via the CGI::SpeedyCGI module.
-Should be able to have the perl prog wait for a new connection, set
-options, etc.
+METHODS
+    The following methods are available in the CGI::SpeedyCGI module.
 
-Option to limit maximum number of processes in the queue.
+    new 
+        Create a new CGI::SpeedyCGI object.
 
-Add CGI::SpeedyCGI method so script can reliably find out if it is
-running under SpeedyCGI.
+            my $sp = CGI::SpeedyCGI->new;
 
+    set_shutdown_handler($function_ref)
+        Register a function that will be called right before the perl
+        interpreter exits. This is not at the end of each request, it is
+        when the perl interpreter decides to exit completely (due to a
+        timeout, maxruns, etc)
 
-Mailing List
-============
+            $sp->set_shutdown_handler(sub {$dbh->logout});
 
-speedycgi@newlug.org.  Subscribe by sending a message to
-speedycgi-request@newlug.org with "subscribe" in the body.
+    i_am_speedy
+        Returns a boolean telling whether this script is running under
+        SpeedyCGI or not. A CGI script can run under regular perl, or under
+        SpeedyCGI. This method allows the script to tell which environment
+        it is in.
 
-Archive is at http://newlug.org/mailArchive/speedycgi
+            $sp->i_am_speedy;
 
+    setopt($optname, $value)
+        Set one of the SpeedyCGI options given in the OPTIONS section.
+        Returns the previous value that the option had. $optname is case-
+        insensitive.
 
-Downloading
-===========
+            $sp->setopt('TIMEOUT', 300);
 
-SpeedyCGI can be retrieved from:
+    getopt($optname)
+        Return the current value of one of the SpeedyCGI options. $optname
+        is case-insensitive.
 
-    http://daemoninc.com/speedycgi
-    http://www.cpan.org/modules/by-authors/id/H/HO/HORROCKS/
+            $sp->getopt('TIMEOUT');
 
+INSTALLATION
+    SpeedyCGI has been tried with perl versions 5.004_04 and 5.005_02, and
+    under Solaris 2.6, Redhat Linux 5.1, and FreeBSD 3.1. There may be
+    problems wither other OSes or earlier versions of Perl.
 
-Author
-======
+    To install, do the following:
 
-Sam Horrocks
-Daemon Consulting Inc.
-http://daemoninc.com
-sam@daemoninc.com
+        perl Makefile.PL
+        make
+        make test
+        make install
 
+    This will install a "speedy" binary in the same directory where "perl"
+    was installed. If you want to install the optional Apache module, see
+    the README in the apache directory.
 
-Copyright (c) 1999 Daemon Consulting Inc. All rights reserved. This
-program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
+BUGS
+    *   Under heavy load we may run out of sockets (especially on FreeBSD),
+        since they hang around in a TIME_WAIT state after closing. Might do
+        better with fifos (named pipes).
+
+        Workaround on FreeBSD is to increase the "maxusers" value in the
+        kernel config file and compile/install a new kernel. The default
+        value of 32 is too low -- use 256 or more.
+
+    *   On Solaris w/Netscape Enterprise 3.x, occasionally the CGI front-end
+        gets stuck in the poll() call in speedy.c.
+
+    *   "make test" reportedly fails under sun4 sunos 4.1.4
+
+    *   Release 1.6 reportedly runs very slow on Dec Alpha running Unix 4.0b and
+        fails the intial_eof test. 1.5 runs OK.
+
+TODO
+    *   Need benchmarks of speedy vs mod_perl
+
+    *   Pass file descriptors 0/1 to the Perl prog using I_SENDFD on systems
+        that support it (like Solaris). Avoids the overhead of copying
+        through the CGI front-end.
+
+    *   Need to figure out whether speedyhandler still works/is useful, and if
+        so document how to use it.
+
+    *   In start_perl, use a poll() timeout instead of an alarm to implement the
+        timeout while waiting for an accept. It's cleaner than a signal.
+
+    *   Need to allow more program control from perl via the CGI::SpeedyCGI
+        module. Should be able to have the perl prog wait for a new
+        connection, etc.
+
+    *   Need an option to limit the maximum number of processes per cgi-bin.
+
+    *   Add option to check the amount of memory in use and exit when it gets
+        too high.
+
+    *   Need tests for:
+
+    *       getopt, setopt and i_am_speedy methods.
+
+    *       multiple persistent perl processes
+
+    *       mod_speedycgi
+
+    *   Add option to have a single perl process handle multiple cgi-bin's.
+
+MAILING LIST
+    speedycgi@newlug.org. Subscribe by sending a message to speedycgi-
+    request@newlug.org with "subscribe" in the body.
+
+    Archive is at http://newlug.org/mailArchive/speedycgi
+
+DOWNLOADING
+    SpeedyCGI can be retrieved from:
+
+        http://daemoninc.com/speedycgi
+        http://www.cpan.org/modules/by-authors/id/H/HO/HORROCKS/
+
+AUTHOR
+        Sam Horrocks
+        Daemon Consulting Inc.
+        http://daemoninc.com
+        sam@daemoninc.com
+
+COPYRIGHT
+    Copyright (c) 1999 Daemon Consulting Inc. All rights reserved. This
+    program is free software; you can redistribute it and/or modify it under
+    the same terms as Perl itself.
+

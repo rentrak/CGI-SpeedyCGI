@@ -34,18 +34,6 @@
 
 #include "speedy.h"
 
-int speedy_make_socket() {
-    return socket(PF_INET, SOCK_STREAM, 0);
-}
-
-/* Port must be already in network byte order. */
-void speedy_fillin_sin(struct sockaddr_in *sa, unsigned short port) {
-    Zero(sa, sizeof(*sa), char);
-    sa->sin_family = AF_INET;
-    sa->sin_port = port;
-    sa->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-}
-
 char *speedy_strdup(char *s) {
     char *new;
     int l = strlen(s)+1;
@@ -58,30 +46,4 @@ int speedy_argc(char **p) {
     int retval = 0;
     for (; *p; ++p) ++retval;
     return retval;
-}
-
-int speedy_connect(unsigned short port) {
-    struct sockaddr_in sa;
-    int s;
-
-    /* Make socket. */
-    if ((s = speedy_make_socket()) == -1) return -1;
-
-    /* Connect */
-    speedy_fillin_sin(&sa, port);
-    if (connect(s, (struct sockaddr*)&sa, sizeof(sa)) == -1) {
-	close(s);
-	s = -1;
-    }
-    return s;
-}
-
-int speedy_make_secret(struct timeval *start_time) {
-    unsigned char *s, *t;
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    s = (unsigned char *)&start_time->tv_usec;
-    t = (unsigned char *)&now.tv_usec;
-    return ((s[0]<<24)|(s[1]<<16)|(s[2]<<8)|s[3]) ^
-	   ((t[3]<<24)|(t[2]<<16)|(t[1]<<8)|t[0]);
 }

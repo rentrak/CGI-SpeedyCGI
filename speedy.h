@@ -32,7 +32,6 @@
  *
  */
 
-
 #include <EXTERN.h>
 #include <perl.h>
 
@@ -87,18 +86,11 @@
 #define CHKERR(retval, msg)     if ((retval) == -1) return(msg)
 #define CHKERR2(v, retval, msg) if ((v=(retval)) == -1) return (msg)
 
-#define CGI_CLEANUP "CGI::_reset_globals"
-
 /* #define OPTS_DEBUG */
 
-/* Persistent info stored in lock file */
-typedef struct {
-    unsigned short	port;		/* Network byte order */
-} PersistInfo;
-
+#include "libspeedy.h"
 #include "copybuf.h"
 #include "opts.h"
-#include "queue.h"
 #include "util.h"
 #include "start_perl.h"
 #include "speedy_poll.h"
@@ -127,8 +119,8 @@ static OptsRec opts[] = /* Our options */
     {
 	"TIMEOUT",	't', OTYPE_INT,	(void*)3600
     },
+    {NULL, 0, 0, NULL}
 };
-#define NUMOPTS (sizeof(opts)/sizeof(OptsRec))
 #endif
 
 extern void xs_init(void);

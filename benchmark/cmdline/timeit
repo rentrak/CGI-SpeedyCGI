@@ -17,7 +17,7 @@ while test $numruns -gt 0; do
     numruns=`expr $numruns - 1`
 done
 
-for cmd in ../speedy perl; do
+for cmd in ../../speedy perl; do
     # Do one run to get program running.
     echo p=20 | $cmd ./test.pl >/dev/null 2>&1
 

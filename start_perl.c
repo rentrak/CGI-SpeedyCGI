@@ -47,16 +47,15 @@ typedef struct {
     GV	*pv_stderr;
     HV	*pv_env;
     AV	*pv_argv;
+    SV  *pv_opts_changed;
+    HV	*pv_opts;
 } PerlVars;
 
 
-static char *do_listen(
-    SpeedyQueue *q, PersistInfo *pinfo, int *lstn
-);
 static void doit(
     int lstn, char **perl_argv, OptsRec *opts, int curdir
 );
-static void onerun(int secret_word, int mypid, PerlVars *pv);
+static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun);
 static int get_string(PerlIO *pio_in, char **buf);
 static void tryexit();
 static void doabort();
@@ -67,28 +66,55 @@ static SV *my_newSVpvn(char *s, int l);
 static void set_sigs();
 
 
-char *speedy_start_perl(
-    SpeedyQueue *q, char **perl_argv, OptsRec *opts, PersistInfo *pinfo
+char *speedy_spawn_perl(
+    SpeedyQueue *q, char *cmd, char **perl_argv, OptsRec *opts,
+    PersistInfo *pinfo, char *envp[]
 )
 {
     char *errmsg;
-    int lstn, i, curdir;
-
-    /* Copy into globals */
-    g_q		= q;
-    g_pinfo	= pinfo;
+    int lstn;
 
     /* Start listening before fork'ing */
-    errmsg = do_listen(q, pinfo, &lstn);
-    if (errmsg) {
-	close(lstn);
+    if ((errmsg = speedy_do_listen(q, pinfo, &lstn)))
 	return errmsg;
-    }
 
     /* Fork and return if parent. */
     if (fork() != 0) {
 	close(lstn);
 	return NULL;
+    }
+    speedy_exec_perl(q, cmd, perl_argv, opts, pinfo, lstn, envp);
+    exit(1);
+    return "notreached";
+}
+
+void speedy_exec_perl(
+    SpeedyQueue *q, char *cmd, char **perl_argv, OptsRec *opts,
+    PersistInfo *pinfo, int lstn, char *envp[]
+)
+{
+    int i, curdir;
+
+    /* Copy into globals */
+    g_q		= q;
+    g_pinfo	= pinfo;
+
+    /*
+     * Bug was that the script "cgitest" would not work under mod_speedycgi.
+     * Perl would not produce any output at all.  Something in the original
+     * environment passed down from Apache was causing this -- zero'ing
+     * out the apache envp fixes this.
+     */
+    envp[0] = NULL;
+
+    /* We should be in our own session */
+    setsid();
+
+    /* Force the listener to fd-3 to stay clear of stdio */
+    if (lstn != 3) {
+	dup2(lstn, 3);
+	close(lstn);
+	lstn = 3;
     }
 
     /* Close off all I/O except for listener and stderr (close it later) */
@@ -99,53 +125,27 @@ char *speedy_start_perl(
     /* Catch signals */
     set_sigs();
 
-    /* Force the listener to fd-3 to stay clear of stdio */
-    dup2(lstn, 3);
-    if (lstn != 3) close(lstn);
-    lstn = 3;
-
     /* Need to remember current directory */
     if ((curdir = open(".", O_RDONLY, 0)) != 1) {
-	dup2(curdir, 4);
-	if (curdir != 4) close(curdir);
-	curdir = 4;
+	/* Make the directory fd 4 to keep it out of the way of stdio */
+	if (curdir != 4) {
+	    dup2(curdir, 4);
+	    close(curdir);
+	    curdir = 4;
+	}
     }
+
+    /* Read more args from #! line in perl script */
+    speedy_addopts_file(opts, cmd, &perl_argv);
 
     /* Do it */
     doit(lstn, perl_argv, opts, curdir);
-    return "notreached";
-}
-
-/* Start a listener.  Always runs in the parent process. */
-static char *do_listen(SpeedyQueue *q, PersistInfo *pinfo, int *lstn) {
-    struct sockaddr_in sa;
-    int len = sizeof(sa);
-
-    /* Open socket */
-    CHKERR2(*lstn, speedy_make_socket(), "socket");
-
-    /* Fill in name -- any port will do */
-    speedy_fillin_sin(&sa, 0);
-
-    /* Bind to name */
-    CHKERR(bind(*lstn, (struct sockaddr*)&sa, sizeof(sa)), "bind");
-
-    /* Listen */
-    CHKERR(listen(*lstn, 1), "listen");
-
-    /* Get port */
-    getsockname(*lstn, (struct sockaddr*)&sa, &len);
-
-    /* Fill in persistent info */
-    pinfo->port = sa.sin_port;
-
-    return NULL;
 }
 
 static void doit(
     int lstn, char **perl_argv, OptsRec *opts, int curdir
 ) {
-    int s, e, len, numruns, maxruns;
+    int s, e, len, numrun, maxruns;
     struct sockaddr_in sa;
     int mypid = getpid();
     PerlVars pv;
@@ -167,6 +167,33 @@ static void doit(
 	doabort();
     }
 
+    /* Create internal variable telling our library that we are really
+     * SpeedyCGI
+     */
+    {
+	SV *sv = perl_get_sv("CGI::SpeedyCGI::_i_am_speedy", TRUE);
+	if (sv) sv_inc(sv);
+    }
+
+    /*
+     * Options variables in our library.  If our module is not installed,
+     * these may come back null.
+     */
+    if (pv.pv_opts_changed = perl_get_sv("CGI::SpeedyCGI::_opts_changed", TRUE))
+	sv_setiv(pv.pv_opts_changed, 0);
+    if ((pv.pv_opts = perl_get_hv("CGI::SpeedyCGI::_opts", TRUE))) {
+	OptsRec *o;
+	for (o = opts; o->name; ++o) {
+	    SV *sv;
+	    if (o->type == OTYPE_STR) {
+		sv = newSVpvn(OVAL_STR(*o), strlen(OVAL_STR(*o)));
+	    } else {
+		sv = newSViv(OVAL_INT(*o));
+	    }
+	    hv_store(pv.pv_opts, o->name, strlen(o->name), sv, 0);
+	}
+    }
+
     /* Time to close stderr */
     do_close(pv.pv_stdin,  TRUE);
     do_close(pv.pv_stdout, TRUE);
@@ -175,7 +202,7 @@ static void doit(
     /* We are not in the queue yet. Parent will connect without using queue. */
     g_queued = 0;
 
-    for (numruns = 1;;numruns++) {
+    for (numrun = 1;;numrun++) {
 
 	/* Set timeout */
         if ((g_alarm = OVAL_INT(opts[OPT_TIMEOUT])) > 0) {
@@ -187,10 +214,15 @@ static void doit(
 	len = sizeof(sa);
 	if ((s = accept(lstn, (struct sockaddr*)&sa, &len)) == -1) doabort();
 	g_queued = 0;
-	dup2(s,0); dup2(s,1); if (s > 1) close(s);
+	if (s != 0) dup2(s,0);
+	if (s != 1) dup2(s,1);
+	if (s > 1) close(s);
 
 	if ((e = accept(lstn, (struct sockaddr*)&sa, &len)) == -1) doabort();
-	dup2(e,2); if (e != 2) close(e);
+	if (e != 2) {
+	    dup2(e,2);
+	    close(e);
+	}
 
 	/* Turn off timeout */
 	if (g_alarm) {
@@ -200,14 +232,39 @@ static void doit(
 	}
 
 	/* Do one run through the script. */
-	onerun(g_q->secret_word, mypid, &pv);
+	onerun(g_q->secret_word, mypid, &pv, numrun);
 
 	/* Make sure we cd back to the correct directory */
 	if (curdir != -1) fchdir(curdir);
 
 	/* See if we've gone over the maxruns */
 	if ((maxruns = OVAL_INT(opts[OPT_MAXRUNS])) > 0) {
-	    if (numruns >= maxruns) doabort();
+	    if (numrun >= maxruns) doabort();
+	}
+
+	/* See if we should get new options from the perl script */
+	if (!pv.pv_opts_changed) {
+	    pv.pv_opts_changed =
+	        perl_get_sv("CGI::SpeedyCGI::_opts_changed", 0);
+	}
+	if (pv.pv_opts_changed && SvIV(pv.pv_opts_changed) != 0) {
+	    if (!pv.pv_opts) {
+		pv.pv_opts = perl_get_hv("CGI::SpeedyCGI::_opts", 0);
+	    }
+	    if (pv.pv_opts) {
+		OptsRec *o;
+		for (o = opts; o->name; ++o) {
+		    SV **sv = hv_fetch(pv.pv_opts, o->name, strlen(o->name), 0);
+		    if (sv) {
+			if (o->type == OTYPE_STR) {
+			    o->value = speedy_strdup(SvPV(*sv, PL_na));
+			} else {
+			    o->value = (void*)SvIV(*sv);
+			}
+		    }
+		}
+	    }
+	    sv_setiv(pv.pv_opts_changed, 0);
 	}
 
 	/* Put ourself into the queue to wait for a connection. */
@@ -218,9 +275,9 @@ static void doit(
 
 
 /* One run of the perl process, do stdio using socket. */
-static void onerun(int secret_word, int mypid, PerlVars *pv) {
-    int sz, i, cmd_done, par_secret;
-    char *buf;
+static void onerun(int secret_word, int mypid, PerlVars *pv, int numrun) {
+    int sz, cmd_done, par_secret;
+    char *buf, *s;
     char *emptyargs[] = {NULL};
     PerlIO *pio_in, *pio_out, *pio_err;
 
@@ -237,7 +294,12 @@ static void onerun(int secret_word, int mypid, PerlVars *pv) {
     /* Get secret word from parent. */
     if (PerlIO_read(pio_in, &par_secret, sizeof(int)) != sizeof(int))
 	doabort();
-    if (par_secret != secret_word) {
+    if (par_secret != secret_word && numrun > 1) {
+	/* Don't check security on the first run.  Slightly less secure,
+	 * but our parent should already be connecting to us very quickly
+	 * after the socket begins listening.  Saves us from having to pass
+	 * the secret word across an exec call (which is problematic).
+	 */
 	/* Security Alert! */
 	sleep(10);
 	doabort();
@@ -258,14 +320,12 @@ static void onerun(int secret_word, int mypid, PerlVars *pv) {
 	    while ((sz = get_string(pio_in, &buf))) {
 
 		/* Find equals. Store key/val in %ENV */
-		for (i = 0; i < sz; ++i) {
-		    if (buf[i] == '=') {
-			SV *sv = my_newSVpvn(buf+i+1, sz-(i+1));
-			hv_store(pv->pv_env, buf, i, sv, 0);
-			buf[i] = '\0';
-			my_setenv(buf, buf+i+1);
-			break;
-		    }
+		if ((s = strchr(buf, '='))) {
+		    int i = s - buf;
+		    SV *sv = my_newSVpvn(s+1, sz-(i+1));
+		    hv_store(pv->pv_env, buf, i, sv, 0);
+		    *s = '\0';
+		    my_setenv(buf, s+1);
 		}
 		Safefree(buf);
 	    }
@@ -315,6 +375,7 @@ static void onerun(int secret_word, int mypid, PerlVars *pv) {
     /* Reset signals */
     set_sigs();
 }
+
 
 /* Read in a string on stdin. */
 static int get_string(PerlIO *pio_in, char **buf) {

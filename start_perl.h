@@ -32,7 +32,13 @@
  *
  */
 
+#define CGI_CLEANUP "CGI::_reset_globals"
 
-char *speedy_start_perl(
-    SpeedyQueue *q, char **perl_argv, OptsRec *opts, PersistInfo *pinfo
+char *speedy_spawn_perl(
+    SpeedyQueue *q, char *cmd, char **perl_argv, OptsRec *opts,
+    PersistInfo *pinfo, char *envp[]
+);
+void speedy_exec_perl(
+    SpeedyQueue *q, char *cmd, char **perl_argv, OptsRec *opts,
+    PersistInfo *pinfo, int lstn, char *envp[]
 );

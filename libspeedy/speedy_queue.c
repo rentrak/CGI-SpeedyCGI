@@ -36,7 +36,6 @@
 
 #include "speedy.h"
 
-#define DO_MMAP
 #define FILE_SIZE 512
 
 #define PINFO_BYTES	(FILE_SIZE - (sizeof(time_t) + 2*sizeof(int)))
@@ -56,44 +55,40 @@ typedef struct {
 } FileHandle;
 
 
-#ifdef DO_MMAP
-#   include <sys/mman.h>
-#endif
-
-#ifndef MAP_FAILED
-#   define MAP_FAILED -1
-#endif
-
-
 static char *q_get(SpeedyQueue *q, PersistInfo *pinfo, int getme);
 static char *open_queue(SpeedyQueue *q, FileHandle *fh);
 static char *close_queue(FileHandle *fh);
 static void do_shutdown(SpeedyQueue *q, FileHandle *fh);
+static int make_secret(struct timeval *start_time);
+static uid_t my_geteuid();
 
 
 char *speedy_q_init(
-    SpeedyQueue *q, OptsRec *opts, char *cmd, struct timeval *start_time
+    SpeedyQueue *q, char *tmpbase, char *cmd, struct timeval *start_time,
+    struct stat *stbuf
 ) {
-    struct stat stbuf;
+    struct stat stbuf_mine;
     int dev, ino, l;
-    char *fname, *tmpbase;
+    char *fname;
 
-    /* Stat command file */
-    CHKERR(stat(cmd, &stbuf), cmd);
+    if (!stbuf) {
+	/* Stat command file */
+	CHKERR(stat(cmd, stbuf = &stbuf_mine), cmd);
+    }
 
     /* Convert dev/ino to ints.  Linux uses double words that sprintf */
     /* doesn't like */
-    dev = stbuf.st_dev;
-    ino = stbuf.st_ino;
+    dev = stbuf->st_dev;
+    ino = stbuf->st_ino;
 
     /* Build lock filename */
-    l = strlen(tmpbase = OVAL_STR(opts[OPT_TMPBASE]));
-    New(123, fname, l+(17*3)+5, char);
-    sprintf(fname, "%s.%x.%x.%x", tmpbase, ino, dev, geteuid());
+    l = strlen(tmpbase);
+    fname = speedy_libfuncs.ls_malloc(l+(17*3)+5);
+    sprintf(fname, "%s.%x.%x.%x", tmpbase, ino, dev, my_geteuid());
 
     /* Make a new queue */
     q->fname		= fname;
-    q->mtime		= stbuf.st_mtime;
+    q->mtime		= stbuf->st_mtime;
     q->start_time	= start_time;
 
     return NULL;
@@ -101,7 +96,7 @@ char *speedy_q_init(
 
 void speedy_q_free(SpeedyQueue *q) {
     if (q->fname) {
-	Safefree(q->fname);
+	speedy_libfuncs.ls_free(q->fname);
 	q->fname = NULL;
     }
 }
@@ -141,7 +136,7 @@ char *speedy_q_add(SpeedyQueue *q, PersistInfo *pinfo) {
     }
     else {
 	/* Write to end of queue */
-	Copy(pinfo, finfo->pinfo + finfo->len, 1, PersistInfo);
+	speedy_libfuncs.ls_memcpy(finfo->pinfo + finfo->len, pinfo, sizeof(PersistInfo));
 	finfo->len++;
     }
     close_queue(&fh);
@@ -184,8 +179,11 @@ static char *q_get(SpeedyQueue *q, PersistInfo *pinfo, int getme) {
 		if (pinfo->port == xpinfo->port) {
 		    /* Found.  Move down other pinfos in the queue */
 		    finfo->len--;
-		    if (i < finfo->len)
-			Move(xpinfo+1, xpinfo, finfo->len - i, PersistInfo);
+		    if (i < finfo->len) {
+			speedy_libfuncs.ls_memmove(xpinfo, xpinfo+1,
+			    (finfo->len - i) * sizeof(PersistInfo)
+			);
+		    }
 		    retval = NULL;
 		    break;
 		}
@@ -193,7 +191,9 @@ static char *q_get(SpeedyQueue *q, PersistInfo *pinfo, int getme) {
 	} else {
 	    /* Get last pinfo in queue */
 	    finfo->len--;
-	    Copy(finfo->pinfo + finfo->len, pinfo, 1, PersistInfo);
+	    speedy_libfuncs.ls_memcpy(
+	        pinfo, finfo->pinfo + finfo->len, sizeof(PersistInfo)
+	    );
 	}
     }
     close_queue(&fh);
@@ -220,38 +220,28 @@ static char *open_queue(SpeedyQueue *q, FileHandle *fh) {
 
 	/* Make sure I own the file. */
 	fstat(fh->fd, &stbuf);
-	if (stbuf.st_uid != geteuid()) {
+	if (stbuf.st_uid != my_geteuid()) {
 	    close(fh->fd);
 	    return "wrong file owner";
 	}
 
-	/* File must be long enough */
-	if (stbuf.st_size < FILE_SIZE) ftruncate(fh->fd, FILE_SIZE);
+	/* Read or mmap in the file */
+	{
+	    int actual_size;
+	    char *errmsg;
 
-#	ifdef DO_MMAP
-	    /* Map in */
-	    fh->finfo = (FileInfo*)mmap(
-		0, FILE_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fh->fd, 0
+	    errmsg = speedy_read_or_mmap(
+		fh->fd, 1, FILE_SIZE, FILE_SIZE, stbuf.st_size,
+		(void**)&(fh->finfo), &actual_size
 	    );
-	    if (fh->finfo == (FileInfo*)MAP_FAILED) {
-		close(fh->fd);
-		return "mmap";
-	    }
-#	else
-	    New(123, fh->finfo, FILE_SIZE, FileInfo);
-
-	    /* Read in */
-	    if (read(fh->fd, fh->finfo, FILE_SIZE) == -1) {
-		close(fh->fd);
-		return "read";
-	    }
-#	endif
+	    if (errmsg) return errmsg;
+	}
 
 	/* If no info from file, create new */
 	if (stbuf.st_size < FILE_SIZE) {
 	    fh->finfo->len		= 0;
 	    fh->finfo->mtime		= q->mtime;
-	    fh->finfo->secret_word	= speedy_make_secret(q->start_time);
+	    fh->finfo->secret_word	= make_secret(q->start_time);
 	}
 	else if (fh->finfo->len < 0) {
 	    fh->finfo->len = 0;
@@ -281,21 +271,7 @@ static char *open_queue(SpeedyQueue *q, FileHandle *fh) {
 }
 
 static char *close_queue(FileHandle *fh) {
-#   ifdef DO_MMAP
-	if (fh->finfo != (FileInfo *)MAP_FAILED) {
-	    munmap((void*)fh->finfo, FILE_SIZE);
-	    fh->finfo = (FileInfo *)MAP_FAILED;
-	}
-#   else
-	if (fh->finfo) {
-	    lseek(fh->fd, 0, SEEK_SET);
-	    CHKERR(write(fh->fd, fh->finfo, FILE_SIZE), "write");
-	    Safefree(fh->finfo);
-	    fh->finfo = NULL;
-	}
-#   endif
-    close(fh->fd);
-    return NULL;
+    return speedy_write_or_munmap(fh->fd, (void**)&(fh->finfo), FILE_SIZE, 1);
 }
 
 static void do_shutdown(SpeedyQueue *q, FileHandle *fh) {
@@ -310,11 +286,40 @@ static void do_shutdown(SpeedyQueue *q, FileHandle *fh) {
 	    e = speedy_connect(pinfo->port);
 
 	    /* Kiss of death */
-	    Copy(&(q->secret_word), buf, 1, int);
+	    speedy_libfuncs.ls_memcpy(buf, &(q->secret_word), sizeof(int));
 	    buf[sizeof(int)] = 'X';
 	    write(s, buf, sizeof(buf));
 	    close(s);
 	    close(e);
 	}
     }
+}
+
+/*
+ * Fill in persistent info based on listening socket.
+ */
+void speedy_fillin_pinfo(PersistInfo *pinfo, int lstn) {
+    struct sockaddr_in sa;
+    int len = sizeof(sa);
+
+    /* Get port */
+    getsockname(lstn, (struct sockaddr*)&sa, &len);
+
+    /* Fill in persistent info */
+    pinfo->port = sa.sin_port;
+}
+
+static int make_secret(struct timeval *start_time) {
+    unsigned char *s, *t;
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    s = (unsigned char *)&start_time->tv_usec;
+    t = (unsigned char *)&now.tv_usec;
+    return ((s[0]<<24)|(s[1]<<16)|(s[2]<<8)|s[3]) ^
+	   ((t[3]<<24)|(t[2]<<16)|(t[1]<<8)|t[0]);
+}
+
+static uid_t my_geteuid() {
+    static uid_t euid = -1;
+    return euid == -1 ? (euid = geteuid()) : euid;
 }

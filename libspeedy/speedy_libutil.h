@@ -32,64 +32,15 @@
  *
  */
 
-/* Copy buffer */
+#define speedy_make_socket() socket(PF_INET, SOCK_STREAM, 0)
 
-#include "speedy.h"
+void speedy_fillin_sin(struct sockaddr_in *sa, unsigned short port);
 
-void speedy_cb_alloc(
-    CopyBuf *bp, int maxsz, int rdfd, int wrfd, char *buf, int sz
-)
-{
-    bp->buf	= buf;
-    bp->sz	= sz;
-    bp->maxsz	= maxsz;
-    bp->eof	= 0;
-    bp->rdfd	= rdfd;
-    bp->wrfd	= wrfd;
-}
-
-void speedy_cb_free(CopyBuf *bp) {
-    if (bp->buf) {
-	Safefree(bp->buf);
-	bp->buf = NULL;
-    }
-}
-
-void speedy_cb_read(CopyBuf *bp) {
-    int n;
-
-    if (!bp->buf) {
-	New(123, bp->buf, bp->maxsz, char);
-    }
-    switch(n = read(bp->rdfd, bp->buf + bp->sz, bp->maxsz - bp->sz))
-    {
-    case -1:
-	if (errno == EAGAIN) break;
-	/* Fall through */
-    case  0:
-	bp->eof = 1;
-	if (bp->sz == 0) {
-	    speedy_cb_free(bp);
-	}
-	break;
-    default:
-	bp->sz += n;
-	break;
-    }
-}
-
-void speedy_cb_write(CopyBuf *bp) {
-    int n = write(bp->wrfd, bp->buf, bp->sz);
-    if (n > 0) {
-	bp->sz -= n;
-	if (bp->sz) {
-	    Move(bp->buf+n, bp->buf, bp->sz, char);
-	}
-	else if (bp->eof) {
-	    speedy_cb_free(bp);
-	}
-    }
-    else if (n == -1 && errno != EAGAIN) {
-	bp->sz = 0;
-    }
-}
+int speedy_connect(unsigned short port);
+char *speedy_read_or_mmap(
+    int fd, int writable, int minsz, int maxsz, int stat_size,
+    void **buf, int *actual_size
+);
+char *speedy_write_or_munmap(
+    int fd, void **buf, int actual_size, int do_write
+);

@@ -43,17 +43,30 @@ static char *doit(
     char *perl_argv[], char *envp[], char *scr_argv[],
     struct timeval *start_time
 );
-static char *comm_init(unsigned short port, int *s, int *e);
 static char *communicate(
     int s, int e, char *envp[], char *scr_argv[], int secret_word
 );
-static int sendenv_size(char *envp[], char *scr_argv[]);
-static void sendenv_fill(
-    char *buf, char *envp[], char *scr_argv[], int secret_word
-);
-static void add_strings(char **bp, char **p);
-static int array_bufsize(char **p);
 
+
+/*
+ * Functions that interface libspeedy to libperl
+ */
+static void ls_memcpy(void *d, void *s, int n) { Copy(s, d, n, char); }
+static void ls_memmove(void *d, void *s, int n) { Move(s, d, n, char); }
+static void ls_bzero(void *s, int n) { Zero(s, n, char); }
+static void *ls_malloc(int n) { void *s; New(123, s, n, char); return s; }
+static void ls_free(void *s) { Safefree(s); }
+
+/*
+ * This global var is used by the library to find the above functions
+ */
+LS_funcs speedy_libfuncs = {
+    ls_memcpy,
+    ls_memmove,
+    ls_bzero,
+    ls_malloc,
+    ls_free,
+};
 
 int main(int argc, char *argv[], char *envp[]) {
     char *s, *errmsg = NULL, **perl_argv, **scr_argv;
@@ -63,13 +76,16 @@ int main(int argc, char *argv[], char *envp[]) {
     /* Get start time */
     gettimeofday(&start_time, NULL);
 
-    /* Two ways we can be called. */
-    /* */
-    /*  - "speedyhandler" - use PATH_TRANSLATED for the cgi script */
-    /*    name and juggle some environment variables. */
-    /* */
-    /*  - "speedy" - cgi script name is in argv */
-    /* */
+    /* We can be called as:
+     *
+     *  - "speedyhandler" - use PATH_TRANSLATED for the cgi script
+     *    name and juggle some environment variables.
+     *
+     *  - "speedybackend" - run the backend only.
+     *
+     *  - "speedy" - cgi script name is in argv
+     *
+     */
     if ((s = strrchr(argv[0], '/'))) {
 	++s;
     } else {
@@ -89,13 +105,27 @@ int main(int argc, char *argv[], char *envp[]) {
 
     /* Get our options */
     speedy_getopt(
-	opts, NUMOPTS, my_argv, envp, &scr_argv, &perl_argv
+	opts, my_argv, envp, &scr_argv, &perl_argv
     );
     if (!errmsg && !scr_argv[0]) errmsg = "Missing command filename";
 
 #ifdef OPTS_DEBUG
-    opts_debug(opts, NUMOPTS, scr_argv, perl_argv);
+    opts_debug(opts, scr_argv, perl_argv);
 #endif
+
+    /* If called as "speedybackend", then go directly to the perl backend */
+    if (strcmp(s, "speedybackend") == 0) {
+	char *err;
+	SpeedyQueue q;
+	PersistInfo pinfo;
+
+	err = speedy_q_init(
+	    &q, OVAL_STR(opts[OPT_TMPBASE]), scr_argv[0], &start_time, NULL
+	);
+	speedy_fillin_pinfo(&pinfo, 3);
+	speedy_exec_perl(&q, scr_argv[0], perl_argv, opts, &pinfo, 3, envp);
+	exit(1);
+    }
 
     /* Communicate with the cgi. */
     if (!errmsg) {
@@ -186,17 +216,20 @@ static char *doit(
     int s, e;
 
     /* Create new queue */
-    if ((retval = speedy_q_init(&q, opts, scr_argv[0], start_time)))
-	return retval;
+    retval = speedy_q_init(
+        &q, OVAL_STR(opts[OPT_TMPBASE]), scr_argv[0], start_time, NULL
+    );
+    if (retval) return retval;
 
-    /* Get proc out of the queue and init communication */
-    retval = speedy_q_get(&q, &pinfo);
-    if (!retval) retval = comm_init(pinfo.port, &s, &e);
+    /* Connect up with client, if it's already there */
+    retval = speedy_getclient(&q, &s, &e);
 
     /* If failed, create a new process. */
     if (retval) {
-	retval = speedy_start_perl(&q, perl_argv, opts, &pinfo);
-	if (!retval) retval = comm_init(pinfo.port, &s, &e);
+	retval = speedy_spawn_perl(
+	    &q, scr_argv[0], perl_argv, opts, &pinfo, envp
+	);
+	if (!retval) retval = speedy_comm_init(pinfo.port, &s, &e);
 	if (retval) goto doit_done;
     }
 
@@ -208,15 +241,6 @@ doit_done:
     return retval;
 }
 
-static char *comm_init(unsigned short port, int *s, int *e) {
-    CHKERR2(*s, speedy_connect(port), "connect failed");
-    if ((*e = speedy_connect(port)) == -1) {
-	close(*s);
-	return "connect failed";
-    }
-    return NULL;
-}
-
 
 static char *communicate(
     int s, int e, char *envp[], char *scr_argv[], int secret_word
@@ -224,19 +248,19 @@ static char *communicate(
 {
     PollInfo pi;
     char *ibuf_buf;
-    int env_sz, ibuf_sz, did_shutdown;
+    int env_sz, ibuf_sz, did_shutdown, i;
 #   define NUMCBUFS 3
     CopyBuf ibuf, obuf, ebuf, *cbs[NUMCBUFS];
     cbs[0] = &ibuf; cbs[1] = &obuf; cbs[2] = &ebuf;
 
     /* Find out the space we need for IBUF to fit the environment */
-    env_sz = sendenv_size(envp, scr_argv);
+    env_sz = speedy_sendenv_size(envp, scr_argv);
     ibuf_sz = OVAL_INT(opts[OPT_BUFSZ_POST]);
     if (env_sz + 512 > ibuf_sz) ibuf_sz = env_sz + 512;
 
     /* Alloc buf, and fill in with env data */
     New(123, ibuf_buf, ibuf_sz, char);
-    sendenv_fill(ibuf_buf, envp, scr_argv, secret_word);
+    speedy_sendenv_fill(ibuf_buf, envp, scr_argv, secret_word);
 
     speedy_poll_init(&pi, s > e ? s : e);
 
@@ -269,9 +293,22 @@ static char *communicate(
 	0
     );
 
+    /* Non-blocking I/O */
+    fcntl(0, F_SETFL, O_NONBLOCK);
+    fcntl(1, F_SETFL, O_NONBLOCK);
+    fcntl(2, F_SETFL, O_NONBLOCK);
+    fcntl(e, F_SETFL, O_NONBLOCK);
+    fcntl(s, F_SETFL, O_NONBLOCK);
+
+    /* Poll/select may not wakeup on intial eof, so read now
+     * (this is tested in initial_eof test #1)
+     */
+    for (i = 0; i < NUMCBUFS; ++i) {
+	speedy_cb_read(cbs[i]);
+    }
+
     /* Copy streams */
     for (did_shutdown = 0; !COPYDONE(obuf) || !COPYDONE(ebuf);) {
-	int i;
 
 	/* See if we should shutdown the CGI's stdin. */
 	if (!did_shutdown && COPYDONE(ibuf)) {
@@ -295,79 +332,36 @@ static char *communicate(
 	/* Do reads/writes */
 	for (i = 0; i < NUMCBUFS; ++i) {
 	    CopyBuf *b = cbs[i];
+	    int did_read = 0;
 
-	    if (speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN))
+	    if (speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN)) {
 		speedy_cb_read(b);
-	    if (speedy_poll_isset(&pi, b->wrfd, SPEEDY_POLLOUT))
+		did_read = 1;
+	    }
+	    /*
+	     * Attempt write now if we did a read.  Slightly more efficient
+	     * and on SGI if we are run with >/dev/null,  select won't
+	     * initially wakeup (this is tested in initial_eof test #2)
+	     */
+	    if ((did_read && CANWRITE(*b)) ||
+	        speedy_poll_isset(&pi, b->wrfd, SPEEDY_POLLOUT))
+	    {
 		speedy_cb_write(b);
+	    }
 	}
     }
+
+    /* SGI's /dev/tty goes crazy unless we turn of non-blocking I/O. */
+    fcntl(1, F_SETFL, 0); close(1);
+    fcntl(2, F_SETFL, 0); close(2);
+    fcntl(0, F_SETFL, 0); close(0);
+    close(s);
+    close(e);
 
     /* Cleanup and return */
     speedy_poll_free(&pi);
     speedy_cb_free(&ibuf);
     speedy_cb_free(&obuf);
     speedy_cb_free(&ebuf);
-    close(s);
-    close(e);
-    close(0);
-    close(1);
-    close(2);
     return NULL;
-}
-
-/* Find out how big a buffer we need for sending environment.*/
-static int sendenv_size(char *envp[], char *scr_argv[]) {
-    return sizeof(int) +			/* secret-word */
-	   1 + array_bufsize(envp) +		/* env */
-	   1 + array_bufsize(scr_argv+1) +	/* argv */
-	   1;					/* terminator */
-}
-
-/* Return the size of buffer needed to send array. */
-static int array_bufsize(char **p) {
-    int l, sz = sizeof(int);	/* bytes for terminator */
-    for (; *p; ++p) {
-	if ((l = strlen(*p))) sz += sizeof(int) + l;
-    }
-    return sz;
-}
-
-#define ADD(s,d,l,t) Copy(s,d,l,t); (d) += ((l)*sizeof(t))
-
-/* Fill in the environment to send. */
-static void sendenv_fill(
-    char *buf, char *envp[], char *scr_argv[], int secret_word
-)
-{
-    /* Add secret word */
-    ADD(&secret_word, buf, 1, int);
-
-    /* Put env into buffer */
-    *buf++ = 'E';
-    add_strings(&buf, envp);
-
-    /* Put argv into buffer */
-    *buf++ = 'A';
-    add_strings(&buf, scr_argv+1);
-
-    /* End */
-    *buf++ = ' ';
-}
-
-/* Copy a block of strings into the buffer,  */
-static void add_strings(char **bp, char **p) {
-    int l;
-
-    /* Put in length plus string, without terminator */
-    for (; *p; ++p) {
-	if ((l = strlen(*p))) {
-	    ADD(&l, *bp, 1, int);
-	    ADD(*p, *bp, l, char);
-	}
-    }
-
-    /* Terminate with zero-length string */
-    l = 0;
-    ADD(&l, *bp, 1, int);
 }

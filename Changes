@@ -1,5 +1,28 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+1.8  Thu Jun  3 13:20:00 PDT 1999
+
+	- Now has support for an Apache module front-end, mod_speedycgi.
+	  This is a optional performance improvement -- it is not required
+	  in order to run SpeedyCGI under Apache.  See apache/README
+	  for details.
+
+	- Fix for initial_eof test bug on SGI-Irix.
+
+	- New CGI:SpeedyCGI method "i_am_speedy" allows the script
+	  to tell whether it is running under SpeedyCGI
+
+	- New CGI::SpeedyCGI methods "setopt" and "getopt" allow the
+	  script to set/get SpeedyCGI options at runtime.
+
+	- Fix for bug in Solaris where SpeedyCGI options could not be
+	  passed in on the #! line.
+
+	- Better documentation
+
+	- Fix to make t/shutdown.t work before "make install" is done.
+
+
 1.7  Thu May 13 00:28:42 PDT 1999
 
 	- Re-did a lot of the queue.c code.  Fixes the bug where queue
