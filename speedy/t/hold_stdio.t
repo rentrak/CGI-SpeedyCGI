@@ -3,14 +3,14 @@
 # able to exit when the backend exits, not when stdio closes
 
 # Test#2
-# If we continue to hold onto the piope, we should eventually get the
+# If we continue to hold onto the pipe, we should eventually get the
 # output from the child on it too, even after parent exits
 
 my $TMP = "/tmp/hold_stdio.$$";
 
 sub adios { my $ok = shift;
     unlink($TMP);
-    print ($ok ? "ok\n" : "failed\n");
+    print ($ok ? "ok\n" : "not ok\n");
     exit;
 }
 

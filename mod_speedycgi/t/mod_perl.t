@@ -38,7 +38,7 @@ if (getit('mod_perl')) {
     if (getit('speedy')) {
 	print "ok\n";
     } else {
-	print "failed\n";
+	print "not ok\n";
     }
 } else {
     # Mod_perl failed, skip this test

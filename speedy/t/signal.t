@@ -17,5 +17,5 @@ my $pid = `$ENV{SPEEDY} -- -r2 $scr $testf`;
 sleep 1;
 $pid && kill 15, $pid;
 sleep 1;
-print -f $testf ? "ok\n" : "failed\n";
+print -f $testf ? "ok\n" : "not ok\n";
 unlink $testf;

@@ -9,7 +9,7 @@ print "1..2\n";
 
 my $out = `$ENV{SPEEDY} /dev/null`;
 my $ok = $out eq '' && $? == 0;
-print $ok ? "ok\n" : "failed\n";
+print $ok ? "ok\n" : "not ok\n";
 
 utime time, time, 't/scripts/basic.1';
 sleep 1;
@@ -19,5 +19,5 @@ $ENV{SPEEDY_BACKENDPROG} = '/bin/ls';
 $out = `$ENV{SPEEDY} t/scripts/basic.1 2>&1`;
 $ok = $? != 0 && $out =~ /cannot spawn/i;
 #print STDERR "out=$out status=$?\n";
-print $ok ? "ok\n" : "failed\n";
+print $ok ? "ok\n" : "not ok\n";
 $ENV{SPEEDY_BACKENDPROG} = $save;

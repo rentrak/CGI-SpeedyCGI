@@ -15,6 +15,15 @@ $VERSION = shift(@ARGV);
 
 $title = "Binaries for SpeedyCGI version $VERSION";
 
+my $blurb = <<'END';
+If you would like contribute binary packages, you can build them
+automatically on
+Linuxes with RPM, Solaris and BSD
+by running "make package".
+Email all the files in the binaries directory to
+ <a href="mailto:sam@daemoninc.com">sam@daemoninc.com</a>
+END
+
 sub grab_vals { my $f = shift;
     open(F, $f) || die "${f}: $!\n";
     $f =~ s/\.desc$//;
@@ -78,10 +87,7 @@ print
 	    } (sort keys %osarch),
 	),
     ),
-    'Please contribute additional binary packages to sam@daemoninc.com. ',
-    'Packages can be built automatically on Solaris, systems with RPM ',
-    'and systems with BSD packages by running "make package". ',
-    'When done, send all the files in the binaries directory. ',
+    "<p>$blurb",
 ;
 
 sub doit { my $v = shift;

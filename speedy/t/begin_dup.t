@@ -13,6 +13,6 @@ my $w = wait;
 if ($w != -1 && $? == 0) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }
 

@@ -8,7 +8,7 @@ TMP1=/tmp/remove_libs$$
 TMP2="${TMP1}2"
 
 it_worked() {
-    test $? -eq 0 && ./$BIN -- -v 2>&1 | grep version >/dev/null
+    test $? -eq 0 && ./$BIN -- -v </dev/null 2>&1 | grep version >/dev/null
 }
 
 it_failed() {
@@ -40,6 +40,9 @@ while :; do
     while test $# -gt 0; do
 	next=$1; shift;
 	case $next in
+	*efence*)
+	    echo keeping $next
+	    ;;
 	-l*|*.a)
 	    # Try to remove it
 	    $cmd "$@" >/dev/null 2>&1

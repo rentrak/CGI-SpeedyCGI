@@ -52,19 +52,21 @@ fi
 
 rpms=${TMPDIR}/RPMS
 build=${TMPDIR}/BUILD
+binroot=${TMPDIR}/binroot
 perlrev=`get_rpm_version perl`
-serial=`echo $VERSION $release | awk '{print $1 * 1000 + $2}'`
+ver=`echo $VERSION | sed 's/-//g'`
+serial=`echo $ver $release | awk '{print $1 * 1000 + $2}'`
 summary=`grab_summary`
-spec=${TMPDIR}/${PKGNM}-${VERSION}-${release}.spec
+spec=${TMPDIR}/${PKGNM}-${ver}-${release}.spec
 doc_files="README README.html COPYING Changes"
 group=Development/Languages
 arch=`rpm --showrc | awk '/build arch/ {print $NF; exit}'`
 os=${distro}-$rev
 
-mkdir $rpms $rpms/$arch $build
+mkdir $rpms $rpms/$arch $build $binroot
 
 file_list() {
-    copy_pkgfiles $TMPDIR "$@"
+    copy_pkgfiles $binroot "$@"
     for f in `file_dest "$@"`; do echo "%attr(755,root,root) $f"; done
 }
 
@@ -73,7 +75,7 @@ file_list() {
     cat <<-END
 	Summary: $summary
 	Name: $PKGNM
-	Version: $VERSION
+	Version: $ver
 	Release: $release
 	Serial: $serial
 	Copyright: $COPYRIGHT
@@ -83,7 +85,7 @@ file_list() {
 	URL: $URL
 	Vendor: $VENDOR
 	%define _topdir $TMPDIR
-	BuildRoot: $TMPDIR
+	BuildRoot: $binroot
 	END
 
     # Insert the description from PM file
@@ -100,16 +102,21 @@ file_list() {
 
     if want_apache_package; then
 	# Put the apache files into the build dir
-	copy_pkgfiles $TMPDIR $APACHE_FILES
+	copy_pkgfiles $binroot $APACHE_FILES
 
 	APACHE_VERSION_NEXT=`expr $APACHE_VERSION + 1`
+	if test $APACHE_VERSION -gt 1; then
+		apache_pkg=httpd
+	else
+		apache_pkg=apache
+	fi
 
 	# Apache module
 	cat <<-END
 	%package $MODNM
 	Summary: $APACHE_DESC
 	Group: $group
-	Requires: speedycgi = ${VERSION}, apache >= $APACHE_VERSION, apache < $APACHE_VERSION_NEXT
+	Requires: speedycgi = ${ver}, $apache_pkg >= $APACHE_VERSION, $apache_pkg < $APACHE_VERSION_NEXT
 	%description $MODNM
 	$APACHE_DESC
 	END
@@ -131,7 +138,11 @@ file_list() {
 ) >$spec &&
 
 # Build the rpms from the spec
-rpm -bb $spec
+if test -x /usr/bin/rpmbuild; then
+    rpmbuild -bb $spec
+else
+    rpm -bb $spec
+fi
 if test $? -ne 0; then
     echo "rpm command failed"
     adios $?

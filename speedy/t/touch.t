@@ -13,4 +13,4 @@ my($pid3) = split(/\n/, `$ENV{SPEEDY} $scr`);
 
 my $ok = $pid1 && $pid2 && $pid3 && $pid1 == $pid3 && $pid1 != $pid2;
 
-print $ok ? "ok\n" : "failed\n";
+print $ok ? "ok\n" : "not ok\n";

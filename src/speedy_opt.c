@@ -1,6 +1,6 @@
 
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -23,7 +23,12 @@
 #define PREFIX "SPEEDY_"
 #define PREFIX_LEN (sizeof(PREFIX)-1)
 #define PREFIX_MATCH(s) (strncmp((s), "SPEEDY_", PREFIX_LEN) == 0)
-#define STRLIST_MALLOC	10
+
+#ifdef SPEEDY_EFENCE
+#    define STRLIST_MALLOC		1
+#else
+#    define STRLIST_MALLOC		10
+#endif
 
 /*
  * StrList is a variable length array of char*'s
@@ -54,27 +59,43 @@ static OptRec *optdefs_save;	/* For save/restore */
 		strlist_append3((l), speedy_util_strndup((s), (len)))
 
 static void strlist_init(StrList *lst) {
-    lst->malloced = STRLIST_MALLOC;
-    speedy_new(lst->ptrs, STRLIST_MALLOC, char*);
+    lst->malloced = 0;
+    lst->ptrs = NULL;
     lst->len = 0;
 }
 
+static void strlist_alloc(StrList *lst, int min) {
+    if (lst->malloced < min) {
+	lst->malloced = min;
+	speedy_renew(lst->ptrs, min, char*);
+    }
+}
+
 static void strlist_setlen(StrList *lst, int newlen) {
+    int malloced = lst->malloced;
+
     while (lst->len > newlen)
 	speedy_free(lst->ptrs[--(lst->len)]);
     lst->len = newlen;
-    while (lst->len >= lst->malloced) {
-	lst->malloced *= 2;
-	speedy_renew(lst->ptrs, lst->malloced, char*);
+    if (malloced < lst->len) {
+	if (malloced)
+	    malloced *= SPEEDY_REALLOC_MULT;
+	else
+	    malloced = STRLIST_MALLOC;
+	if (malloced < lst->len)
+	    malloced = lst->len;
+	strlist_alloc(lst, malloced);
     }
 }
 
 static void strlist_append3(StrList *lst, char *str) {
-    lst->ptrs[lst->len] = str;
-    strlist_setlen(lst, lst->len + 1);
+    int len = lst->len;
+    strlist_setlen(lst, len+1);
+    lst->ptrs[len] = str;
 }
 
 static char **strlist_export(StrList *lst) {
+    strlist_alloc(lst, lst->len+1);
     lst->ptrs[lst->len] = NULL;
     return lst->ptrs;
 }
@@ -162,9 +183,8 @@ static void cmdline_split(
 	for (; *p && **p == '-'; ++p) {
 	    if (!doing_speedy_opts)
 		if ((doing_speedy_opts = (p[0][1] == '-' && p[0][2] == '\0')))
-		    ++p;
-	    if (*p)
-		strlist_append(doing_speedy_opts ? speedy_opts : perl_args, *p);
+		    continue;
+	    strlist_append(doing_speedy_opts ? speedy_opts : perl_args, *p);
 	}
 
 	if (*p) {
@@ -227,7 +247,7 @@ const char *speedy_opt_get(OptRec *optrec) {
 }
 
 static int ocmp(const void *a, const void *b) {
-    return strcmp((const char *)a, ((OptRec *)b)->name);
+    return strcmp((const char *)a, ((const OptRec *)b)->name);
 }
 
 static int opt_set_byname(const char *optname, int len, const char *value) {
@@ -286,7 +306,7 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
     /* Append the PerlArgs option to perl_argv */
     if (OPTREC_PERLARGS.flags & SPEEDY_OPTFL_CHANGED) {
 	StrList split;
-	char *tosplit[2];
+	const char *tosplit[2];
 
 	strlist_init(&split);
 	tosplit[0] = OPTVAL_PERLARGS;
@@ -422,7 +442,7 @@ const char * const *speedy_opt_script_argv(void) {
 }
 
 SPEEDY_INLINE const char *speedy_opt_script_fname(void) {
-    return exec_argv.ptrs[script_argv_loc];
+    return strlist_export(&exec_argv)[script_argv_loc];
 }
 
 #ifdef SPEEDY_BACKEND

@@ -16,13 +16,10 @@ ModTest::test_init(60, [$scr]);
 my $pid = ModTest::get_httpd_pid;
 
 sub mem_used {
-    my $val;
-    open(F, "</proc/$pid/status") || return 0;
-    while (<F>) {
-	next unless /VmSize/;
-	$val = (split)[1];
-	last;
-    }
+    open(PS, "ps -o vsz -p $pid |");
+    scalar <PS>;
+    my $val = int(<PS>);
+    close(PS);
     return $val;
 }
 
@@ -32,15 +29,15 @@ sub do_requests { my $times = shift;
 
 if (&mem_used) {
     print "1..1\n";
-    &do_requests(100);
+    &do_requests(50);
     my $mem1 = &mem_used;
-    &do_requests(200);
+    &do_requests(400);
     my $mem2 = &mem_used;
     ## print STDERR "mem1=$mem1 mem2=$mem2\n";
     if ($mem2 <= $mem1) {
 	print "ok\n";
     } else {
-	print "failed\n";
+	print "not ok\n";
     }
 } else {
     print "1..0\n";

@@ -15,6 +15,6 @@ for (my $i = 0; $i <= 4; ++$i) {
     if ($val == $list[$i]) {
 	print "ok\n";
     } else {
-	print "failed - got $val instead of $list[$i]\n";
+	print "not ok # got $val instead of $list[$i]\n";
     }
 }

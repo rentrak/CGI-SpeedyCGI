@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -239,18 +239,24 @@ SpeedyMapInfo *speedy_util_mapin(int fd, int max_size, int file_size)
     
     speedy_new(mi, 1, SpeedyMapInfo);
 
-    mi->maplen = max_size == -1 ? file_size : min(file_size, max_size);
-    mi->addr = mmap(0, mi->maplen, PROT_READ, MAP_SHARED, fd, 0);
-    mi->is_mmaped = (mi->addr != (void*)MAP_FAILED);
+    if (file_size) {
+	mi->maplen = max_size == -1 ? file_size : min(file_size, max_size);
+	mi->addr = mmap(0, mi->maplen, PROT_READ, MAP_SHARED, fd, 0);
+	mi->is_mmaped = (mi->addr != (void*)MAP_FAILED);
 
-    if (!mi->is_mmaped) {
-	speedy_new(mi->addr, mi->maplen, char);
-	lseek(fd, 0, SEEK_SET);
-	mi->maplen = readall(fd, mi->addr, mi->maplen);
-	if (mi->maplen == -1) {
-	    speedy_util_mapout(mi);
-	    return NULL;
+	if (!mi->is_mmaped) {
+	    speedy_new(mi->addr, mi->maplen, char);
+	    lseek(fd, 0, SEEK_SET);
+	    mi->maplen = readall(fd, mi->addr, mi->maplen);
+	    if (mi->maplen == -1) {
+		speedy_util_mapout(mi);
+		return NULL;
+	    }
 	}
+    } else {
+	mi->maplen = 0;
+	mi->addr = NULL;
+	mi->is_mmaped = 0;
     }
     return mi;
 }
@@ -285,7 +291,7 @@ void speedy_util_exit(int status, int underbar_exit) {
 
 	    mkdir("/tmp/speedy_core", 0777);
 	    gettimeofday(&tv, NULL);
-	    sprintf(buf, "/tmp/speedy_core/%d.%06d.%d", (int)tv.tv_sec, (int)tv.tv_usec, getpid());
+	    sprintf(buf, "/tmp/speedy_core/%s.%d.%06d.%d", SPEEDY_PROGNAME, (int)tv.tv_sec, (int)tv.tv_usec, getpid());
 	    mkdir(buf, 0777);
 	    chdir(buf);
 	    kill(getpid(), SIGFPE);

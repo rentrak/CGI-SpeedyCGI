@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -66,10 +66,13 @@
 #define HEX_STR_SIZE(type) (sizeof(type)*2)
 #define NIB_TO_HEX(n) ("0123456789abcdef"[n])
 #define HEX_CVT(i,b) \
-    do { \
-	*(b)++ = NIB_TO_HEX((i)&15); \
-	(i) = (i) >> 4; \
-    } while (i)
+    { \
+	int cnt = HEX_STR_SIZE(i); \
+	do { \
+	    *(b)++ = NIB_TO_HEX((i)&15); \
+	    (i) = (i) >> 4; \
+	} while (i && --cnt); \
+    }
 
 #define DEVFD "/dev/fd/%d"
 
@@ -134,7 +137,9 @@ extern void xs_init(pTHXo);
 #define PERLVAL_I_AM_SPEEDY       ((SV*)(SpeedyPerlVars[12].ptr))
 #define PERLVAR_RUN_CLEANUP       (SpeedyPerlVars[13])
 #define PERLVAL_RUN_CLEANUP       ((CV*)(SpeedyPerlVars[13].ptr))
-#define PERLVAR_COUNT             14
+#define PERLVAR_FORK              (SpeedyPerlVars[14])
+#define PERLVAL_FORK              ((CV*)(SpeedyPerlVars[14].ptr))
+#define PERLVAR_COUNT             15
 
 static SpeedyPerlVar SpeedyPerlVars[] = {
     {NULL, SVt_PVHV , "ENV"},
@@ -151,17 +156,19 @@ static SpeedyPerlVar SpeedyPerlVars[] = {
     {NULL, SVt_PV   , SPEEDY_PKG("_sub")},
     {NULL, SVt_IV   , SPEEDY_PKG("i_am_speedy")},
     {NULL, SVt_PVCV , SPEEDY_PKG("_run_cleanup")},
+    {NULL, SVt_PVCV , SPEEDY_PKG("_fork")},
 };
 
 /* End of generated section */
 
 static const char 	*dev_null = "/dev/null";
 
-static PerlInterpreter	*my_perl;
+PerlInterpreter		*my_perl;
 static int		cwd_fd = -1;
 static STRLEN		junk_len;
 static HV		*cwd_hash, *scr_hash;
 static const int	caught_sigs[] = {SIGTERM, SIGHUP, SIGINT};
+
 
 #define NUMSIGS (sizeof(caught_sigs) / sizeof(int))
 
@@ -178,9 +185,9 @@ static int devino_str(SpeedyDevIno devino, char str[DEVINO_STR_SIZE]) {
     speedy_ino_t i = devino.i;
     speedy_dev_t d = devino.d;
 
-    HEX_CVT(i, bp);
+    HEX_CVT(i, bp)
     *bp++ = '_';
-    HEX_CVT(d, bp);
+    HEX_CVT(d, bp)
     *bp = '\0';
     return bp - str;
 }
@@ -510,6 +517,8 @@ static void store_last_cwd(SpeedyCwd **last_cwd, SpeedyCwd *cwd) {
 
 #define PACKAGE_FMT	SPEEDY_PKG("_%s")
 #define COLON_HANDLER	"::handler"
+#define PACKAGE1      "package "
+#define PACKAGE2      "; sub handler { "
 
 static void load_script(
     SpeedyDevIno devino, SpeedyScript *scr, const char *scr_path
@@ -540,7 +549,9 @@ static void load_script(
 	    speedy_util_die(scr_path);
 
 	/* Create sv to eval */
-	sv = newSVpvf("package %s; sub handler { ", pkg);
+        sv = newSVpvn(PACKAGE1, sizeof(PACKAGE1)-1);
+        sv_catpv (sv, pkg);
+        sv_catpvn(sv, PACKAGE2, sizeof(PACKAGE2)-1);
 	sv_catpvn(sv, mi->addr, mi->maplen);
 	sv_catpvn(sv, "; }", 3);
 
@@ -577,12 +588,15 @@ static void cleanup_after_perl(void) {
     /* Cached time is now invalid */
     speedy_util_time_invalidate();
 
-    /* Terminate if a forked child returned */
-    if (getpid() != speedy_util_getpid())
-	speedy_util_exit(0,0);
-
     /* Cancel any alarms */
     alarm(0);
+
+    /* Terminate if a forked child returned */
+    if (getpid() != speedy_util_getpid()) {
+	speedy_util_pid_invalidate();
+	speedy_file_fork_child();
+	all_done();
+    }
 
     /* Tell our file code that its fd is suspect */
     speedy_file_fd_is_suspect();
@@ -881,11 +895,6 @@ void speedy_perl_init(void) {
     SpeedyScript *scr;
     int single_script = DOING_SINGLE_SCRIPT;
 
-    /* Allocate and construct new perl */
-    if (!(my_perl = perl_alloc()))
-	DIE_QUIET("Cannot allocate perl");
-    perl_construct(my_perl);
-
     /* If we're exec'ing a setuid script then we must use a temporary
      * script name of /dev/fd/N 
      */
@@ -1004,17 +1013,27 @@ void speedy_perl_run(slotnum_t gslotnum, slotnum_t bslotnum) {
 int speedy_perl_fork(void) {
     dSP;
     int retval;
-    SV *sv;
+    static int made_sub;
+
+    if (!made_sub) {
+	made_sub = 1;
+	eval_pv("sub " SPEEDY_PKG("_fork") " {return fork;}", TRUE);
+    }
+
+    ENTER;
+    SAVETMPS;
 
     PUSHMARK(SP);
-    sv = newSVpv("fork", sizeof("fork")-1);
-    eval_sv(sv, G_NOARGS);
+    if (call_sv(get_perlvar(&PERLVAR_FORK), G_NOARGS|G_SCALAR) != 1)
+	DIE_QUIET("perl fork didn't return one value");
 
     SPAGAIN;
     retval = POPi;
     PUTBACK;
 
-    SvREFCNT_dec(sv);
+    FREETMPS;
+    LEAVE;
+
     return retval;
 }
 

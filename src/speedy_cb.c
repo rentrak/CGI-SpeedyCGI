@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -56,10 +56,8 @@ void speedy_cb_read(CopyBuf *cb) {
 	    if (new_buf_len > cb->maxsz)
 		new_buf_len = cb->maxsz;
 
-	    if ((buf = speedy_circ_buf(&cb->circ)))
-		speedy_renew(buf, new_buf_len, char);
-	    else
-		speedy_new(buf, new_buf_len, char);
+	    buf = speedy_circ_buf(&cb->circ);
+	    speedy_renew(buf, new_buf_len, char);
 
 	    if (buf)
 		speedy_circ_realloc(&cb->circ, buf, new_buf_len);

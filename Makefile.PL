@@ -20,11 +20,13 @@ print "Compile mod_speedycgi (default no)? ";
 
 my @dirs = qw(src speedy_backend speedy);
 my $macro = $write_makefile_common{macro};
+my $apache_module = 0;
 if (<STDIN> =~ /y/i) {
-    die "ERROR: Could not find a working copy of 'apxs' in your path.\n"
+    die "ERROR: Command 'apxs -q CC' failed.\n"
 	unless $macro->{APACHE_APXS_WORKS};
     print "Compiling for Apache version $macro->{APACHE_VERSION}\n";
     push(@dirs, $macro->{MOD_SPEEDYCGI_DIR});
+    $apache_module = 1;
 }
 
 WriteMakefile(
@@ -47,7 +49,8 @@ use ExtUtils::Embed;
 sub postamble {
     my $extra = SpeedyMake->optdefs_cmds('src');
     my $test_install_extra;
-    if (my $mod_dir = $macro->{MOD_SPEEDYCGI_DIR}) {
+    if ($apache_module) {
+	my $mod_dir = $macro->{MOD_SPEEDYCGI_DIR};
 	$extra .=
 	    "\ninstall ::\n\tcd $mod_dir && \$(MAKE) install\n";
 	$test_install_extra =

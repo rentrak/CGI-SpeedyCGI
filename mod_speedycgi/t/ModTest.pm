@@ -90,10 +90,8 @@ sub find_httpd {
 }
 
 sub abort_test {
-    my $reason = 'Cannot start httpd, skipping test';
     $| = 1;
-    print "1..1\nok # skip $reason\n";
-    print STDERR "$reason\n";
+    print "1..0 # Skipped: can't start httpd in this configuration\n";
     exit;
 };
 
@@ -169,7 +167,7 @@ sub touchem { my $scripts = shift;
 }
 
 sub set_alarm { my $secs = shift;
-    $SIG{ALRM} = sub { print "failed\n"; exit };
+    $SIG{ALRM} = sub { print "not ok\n"; exit };
     alarm($secs);
 }
 

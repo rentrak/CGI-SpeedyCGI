@@ -22,5 +22,5 @@ $txt = &ModTest::html_get("/$scr");
 if ($txt =~ /warn=1/) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }

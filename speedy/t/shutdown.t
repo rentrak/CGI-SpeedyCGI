@@ -29,7 +29,7 @@ for (my $i = 0; $i < 2; $i++) {
     if (&run($i) > 0 && ! -f $testf && &run($i) > 0 && -f $testf) {
 	print "ok\n"
     } else {
-	print "failed\n";
+	print "not ok\n";
     }
     unlink $testf;
 }
@@ -38,7 +38,7 @@ for (my $i = 0; $i < 2; $i++) {
 if (&run(2) > 0 && -f $testf) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }
 unlink $testf;
 
@@ -46,7 +46,7 @@ unlink $testf;
 if (!&run(3) && -f $testf) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }
 unlink $testf;
 
@@ -54,6 +54,6 @@ unlink $testf;
 if (&run(1, 1) > 0 && utime(time, time, $scr) && &run(1, 1) > 0 && -f $testf) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }
 unlink $testf;

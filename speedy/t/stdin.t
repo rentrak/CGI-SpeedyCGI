@@ -19,7 +19,7 @@ close(S);
 
 open(F, "</tmp/stdin.$$");
 my $line = <F>;
-print ($line eq "line3\n" ? "ok\n" : "fail\n");
+print ($line eq "line3\n" ? "ok\n" : "not ok\n");
 close(F);
 
 unlink("/tmp/stdin.$$");

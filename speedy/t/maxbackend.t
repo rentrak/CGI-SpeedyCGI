@@ -29,4 +29,4 @@ foreach my $p ($pid1, $pid2, $pid3) {
     $p && kill 9, $p;
 }
 
-print $ok ? "ok\n" : "failed\n";
+print $ok ? "ok\n" : "not ok\n";

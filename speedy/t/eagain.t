@@ -53,7 +53,7 @@ sub do_test { my($do_stdin) = @_;
 	}
     }
     close(F);
-    print $ok ? "ok\n" : "failed\n";
+    print $ok ? "ok\n" : "not ok\n";
 
     unlink($tmp);
 }

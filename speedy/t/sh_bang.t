@@ -29,7 +29,7 @@ for (my $i = 0; $i < 4; ++$i) {
     }
 }
 
-print $failed ? "failed\n" : "ok\n";
+print $failed ? "not ok\n" : "ok\n";
 
 my $scr = 't/scripts/sh_bang.2';
 utime time, time, $scr;
@@ -49,5 +49,5 @@ sub onerun {
 }
 
 &onerun;
-print &onerun ? "ok\n" : "failed\n";
+print &onerun ? "ok\n" : "not ok\n";
 alarm(0);

@@ -21,4 +21,4 @@ my $three = `$cmd`;
 
 #print STDERR "one=$one two=$two three=$three\n";
 
-print $one == 1 && $two == 2 && $three == 1 ? "ok\n" : "fail\n";
+print $one == 1 && $two == 2 && $three == 1 ? "ok\n" : "not ok\n";

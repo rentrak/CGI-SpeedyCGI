@@ -2,7 +2,7 @@
 
 
 #
-# Copyright (C) 2002  Sam Horrocks
+# Copyright (C) 2003  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -24,7 +24,7 @@ package CGI::SpeedyCGI;
 
 use strict;
 use vars qw($VERSION);
-$VERSION = '2.21';
+$VERSION = '2.22';
 
 ## use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 ## 
@@ -125,7 +125,7 @@ SpeedyCGI - Speed up perl scripts by running them persistently.
 
  #!/usr/bin/speedy
 
- ### Your Script Here
+ ### Your Script Here.  For example:
  print "Content-type: text/html\n\nHello World!\n";
 
  ##
@@ -191,7 +191,7 @@ the server.
 SpeedyCGI and PersistentPerl are currently both names for the same code.
 SpeedyCGI was the original name, but because people weren't sure what it did,
 the name PersistentPerl was picked as an alias.  At some point
-SpeedyCGI will probably be replaced by PersistentPerl, or become
+SpeedyCGI will be replaced by PersistentPerl, or become
 a sub-class of PersistentPerl to avoid always having two distributions.
 
 
@@ -528,7 +528,7 @@ Apache as documented in L<"Apache Configuration">.
 
 =head2 Source Code Installation
 
-To compile SpeedyCGI you will need perl 5.004 or later, and a C
+To compile SpeedyCGI you will need perl 5.005_03 or later, and a C
 compiler, preferably the same one that your perl distribution was compiled
 with.  SpeedyCGI is known to work under Solaris, Redhat Linux,
 FreeBSD and OpenBSD.  There may be problems with other OSes or
@@ -587,6 +587,54 @@ required), you will have to use "use lib" so it
 can be located.
 
 =back
+
+=head2 Setuid Install
+
+SpeedyCGI has limited support for running setuid - installing this way may compromise the security of your system.  To install setuid do the following:
+
+=over
+
+=item *
+
+Run "perl Makefile.PL"
+
+=back
+
+=over
+
+=item *
+
+Edit speedy/Makefile and add "-DIAMSUID" to the end of the "DEFINE = " line.
+
+=back
+
+=over
+
+=item *
+
+Run make
+
+=back
+
+=over
+
+=item *
+
+Take the resulting "speedy" binary and install it suid-root as
+/usr/bin/speedy_suid
+
+=back
+
+=over
+
+=item *
+
+Change your setuid scripts to use /usr/bin/speedy_suid as the interpreter.
+
+=back
+
+This has been know to work in Linux and FreeBSD.  Solaris will work as long as
+the Group option is set to "none".
 
 =head2 Apache Installation
 
@@ -744,7 +792,7 @@ with "use vars" instead of "my" to avoid the problem altogether.
 Here's a good explanation of the problem - it's for mod_perl, but the same
 thing applies to speedycgi:
 
-    http://perl.apache.org/faq/mod_perl_cgi.html#Variables_retain_their_value_fro
+    http://perl.apache.org/docs/general/perl_reference/perl_reference.html#my___Scoped_Variable_in_Nested_Subroutines
 
 If all else fails you can disable persistence by setting MaxRuns to 1.
 The only benefit of this over normal perl is that speedy will pre-compile
@@ -806,29 +854,29 @@ oracle is exec'ed.
 =head1 USING GROUPS
 
 The group feature in SpeedyCGI can be used to help reduce the amount of
-memory used by the perl interpreters.  When groups are not used (ie when
-group name is "none"), each perl script is given its own set of perl
-interpreters, separate from the perl interpreters used for other scripts.
-In SpeedyCGI each perl interpreter is also a separate system process.
+memory used by the perl interpreters.  By default groups are not used
+(group name is "none"), and each perl script is given its own set of perl
+interpreters.  Each perl interpreter is also a separate system process.
 
-When grouping is used, perl interpreters are put into a group.  All perl
-interpreters in that group can run perl scripts in that same group.
-What this means is that by putting all your scripts into one group,
-there could be one perl interpreter running all the perl scripts on
-your system.  This can greatly reduce your memory needs when running
-lots of different perl scripts.
+When grouping is used, perl interpreters and perl scripts are put in
+a group.  All perl interpreters in a group can run perl scripts in
+the same group.  What this means is that by putting all your scripts
+into one group, there could be one perl interpreter running all the perl
+scripts on your system.  This can greatly reduce your memory needs when
+running lots of different perl scripts.
 
 SpeedyCGI group names are entities unto themselves.  They are not
 associated with Unix groups, or with the Group directive in Apache.
-Group names are created by the person running SpeedyCGI based on
-their needs.  There are two special group names "none" and "default".
-All other group names are created by the user of SpeedyCGI using the
-Group option described in L<"OPTIONS">.
+Expect for the two special group names "none" and "default", all
+group names are created by the user of SpeedyCGI using the Group option
+described in L<"OPTIONS">
 
-If you want to use the maximum amount of grouping possible (ie all scripts in
-the same interpreter), then you should always use the group name "default".
-When you do this, you will get the fewest number of perl interpreters possible.
-Each perl interpreter will be able to run any of your perl scripts.
+If you want the maximum amount of grouping possible then you
+should run all scripts with the group option set to "default".  This the
+group name used if you just specify "-g" on the command line without an
+explicit group name.  When you do this, you will get the fewest number
+of perl interpreters possible - any perl interpreter will be able to
+run any of your perl scripts.
 
 Although using group "default" for all scripts results in the most efficient
 use of resources, it's not always possible or desirable to do this.  You may
@@ -838,20 +886,20 @@ want to use other group names for the following reasons:
 
 =item * To isolate misbehaving scripts, or scripts that don't work in groups.
 
-Some scripts cannot work in groups.  When perl scripts are grouped
+Some scripts won't work in groups.  When perl scripts are grouped
 together they are each given their own unique package name - they are not
 run out of the "main" package as they normally would be.  So, for example,
 a script that explicitly uses "main" somewhere in its code to find its
 subroutines or variables probably won't work in groups.  In this case,
-it's probably best to run such a script with group "none", so it is
+it's probably best to run such a script with group "none", so it's 
 compiled and run out of package main, and always given its own interpreter.
 
-Other scripts may make changes to included packages, etc, that may break
+In other cases, scripts may make changes to included packages, etc, that may break
 other scripts running in the same interpreter.  In this case such scripts can
-be given their own group name (like group name "pariah") to keep them away
-from other scripts that they are incompatible with.  The rest of your scripts
+be given their own group name (like "pariah") to keep them away
+from scripts they are incompatible with.  The rest of your scripts
 can then run out of group "default".  This will ensure that the "pariah"
-scripts won't run within the same interpreter as your other scripts.
+scripts won't run within the same interpreter as the other scripts.
 
 =back
 
@@ -859,14 +907,14 @@ scripts won't run within the same interpreter as your other scripts.
 
 =item * To pass different perl or SpeedyCGI parameters to different scripts.
 
-You may want to use separate groups to create separate policies for
+You may want to use separate groups to create different policies for
 different scripts.
 
-Say you have an email application that contains ten perl scripts, and since
+For example, you may have an email application that contains ten perl scripts, and since
 the common perl code used in this application has a bad memory leak, you want
-to use a MaxRuns setting of 5 for all of these scripts.  You then want all
-your other scripts to run in a separate group with a normal MaxRuns policy.
-What you can do is edit the ten email scripts, and at the top, put in the line:
+to use a MaxRuns setting of 5 for all of these scripts.  You want to run
+all your other scripts with a normal MaxRuns setting.  To accomplish this
+you can edit the ten email application scripts, and at the top use the line:
 
     #!/usr/bin/speedy -- -gmail -r5
 
@@ -877,7 +925,7 @@ In the rest of your perl scripts you can use:
 What this will do is put the ten email scripts into a group of their own
 (named "mail") and give them all the default MaxRuns value of 5.  All other
 scripts will be put into the group named "default", and this group will have
-the normal MaxRuns setting.
+a normal MaxRuns setting.
 
 =back
 
@@ -1027,7 +1075,7 @@ http://daemoninc.com/SpeedyCGI/yapc_2001/
 
 =head1 COPYRIGHT
 
-Copyright (C) 2002  Sam Horrocks
+Copyright (C) 2003  Sam Horrocks
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License

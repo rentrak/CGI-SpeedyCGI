@@ -13,5 +13,5 @@ sub am_speedy { my $prog = shift;
     return $v ne '' && $v > 0;
 }
 
-print &am_speedy($Config{perlpath}) ? "failed\n" : "ok\n";
-print &am_speedy($ENV{SPEEDY})      ? "ok\n"     : "failed\n";
+print &am_speedy($Config{perlpath}) ? "not ok\n" : "ok\n";
+print &am_speedy($ENV{SPEEDY})      ? "ok\n"     : "not ok\n";

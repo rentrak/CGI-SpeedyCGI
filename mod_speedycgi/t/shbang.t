@@ -26,5 +26,5 @@ my $two = &ModTest::html_get("/$scr2");
 if ($one > 0 && $two > 0 && $one != $two) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }

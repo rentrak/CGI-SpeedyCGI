@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2002  Sam Horrocks
+# Copyright (C) 2003  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -41,6 +41,6 @@ sub clean_files_extra {qw(.libs *.lo *.slo t mod_speedycgi.so)}
 sub mod_speedycgi_cmds {'../src/mod_speedycgi2_cmds.c'}
 
 # Need symlinks for tests.
-symlink("../mod_speedycgi/t", "t");
+symlink("../mod_speedycgi/t", "t") || die "Can't create symlinks for tests";
 
 SpeedyMake::mod_speedycgi2->init->write_makefile;

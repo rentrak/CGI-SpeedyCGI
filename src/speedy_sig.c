@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -82,7 +82,7 @@ static void sig_init2(SigList *sl, int how) {
     {
 	struct sigaction sigact;
 	sigact.sa_handler = &sig_handler;
-	sigact.sa_flags = SA_RESTART;
+	sigact.sa_flags = 0;
 	sigemptyset(&sigact.sa_mask);
 	for (i = 0; i < sl->numsigs; ++i)
 	    sigaction(sl->signum[i],  &sigact, &(sl->sigact_save[i]));

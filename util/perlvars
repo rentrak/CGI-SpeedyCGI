@@ -22,6 +22,7 @@ my @vars = (
     ['SVt_PV',    1, '_sub'],
     ['SVt_IV',    1, 'i_am_speedy'],
     ['SVt_PVCV',  1, '_run_cleanup'],
+    ['SVt_PVCV',  1, '_fork'],
 );
 my $myname = 'util/perlvars';
 

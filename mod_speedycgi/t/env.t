@@ -21,5 +21,5 @@ my $txt = &ModTest::html_get("/$scr");
 if ($txt =~ /ENVTEST=XXX/) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }

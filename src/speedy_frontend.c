@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -471,13 +471,6 @@ int speedy_frontend_connect(int socks[NUMFDS], slotnum_t *fslotnum_p) {
     if ((b)->len + (l) > (b)->alloced) \
 	enlarge_buf((b),(l))
 
-#define BUF_REALLOC(b,sz) \
-    do { \
-	int newsz = (sz); \
-	(b)->alloced = newsz; \
-	speedy_renew((b)->buf, newsz, char); \
-    } while (0)
-
 #define ADD2(b,s,l) \
     speedy_memcpy((b)->buf + (b)->len, (s), (l)); \
     (b)->len += (l)
@@ -507,15 +500,21 @@ int speedy_frontend_connect(int socks[NUMFDS], slotnum_t *fslotnum_p) {
     } while (0)
 
 static void enlarge_buf(SpeedyBuf *b, int min_to_add) {
-    int new_size = b->alloced * 2;
-    new_size = max(new_size, b->len + min_to_add);
-    BUF_REALLOC(b, new_size);
+    int new_size = b->alloced * SPEEDY_REALLOC_MULT;
+    int min_size = b->len + min_to_add;
+    if (new_size < min_size)
+	new_size = min_size;
+    b->alloced = new_size;
+    speedy_renew(b->buf, new_size, char);
 }
 
 static void alloc_buf(SpeedyBuf *b, int bytes) {
-    b->alloced = bytes;
-    speedy_new(b->buf, bytes, char);
     b->len = 0;
+    b->alloced = bytes;
+    if (bytes)
+	speedy_new(b->buf, bytes, char);
+    else
+	b->buf = NULL;
 }
 
 /* Add a string to the buffer */
@@ -553,7 +552,11 @@ void speedy_frontend_mkenv(
 	speedy_script_missing();
 
     /* Create buffer */
+#ifdef SPEEDY_EFENCE
+    alloc_buf(sb, min_alloc);
+#else
     alloc_buf(sb, max(512, min_alloc));
+#endif
 
     /* Add env and argv */
     add_strings(sb, envp);

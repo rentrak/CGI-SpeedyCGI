@@ -32,4 +32,4 @@ open(F, "$cmd |");
 my $ok = grep {/ASDFABC123/} <F>;
 close(F);
 
-print $ok ? "ok\n" : "failed\n";
+print $ok ? "ok\n" : "not ok\n";

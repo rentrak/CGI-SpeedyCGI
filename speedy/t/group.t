@@ -16,7 +16,7 @@ sub check_pids { my($same, $pid1, $pid2) = @_;
     if ($ok) {
 	print "ok\n";
     } else {
-	print "failed\n";
+	print "not ok\n";
     }
 }
 
@@ -41,12 +41,12 @@ sleep 1;
 my $pid1 = `$ENV{SPEEDY} -- -g t/scripts/group3`;
 my $pid2 = `$ENV{SPEEDY} -- -g t/scripts/group3`;
 my $ok = $pid1 ne '' && $pid2 ne '' && $pid1 > 0 && $pid1 == $pid2;
-print $ok ? "ok\n" : "failed\n";
+print $ok ? "ok\n" : "not ok\n";
 
 my($pid, $shift, $pop) =
     split(/\n/, `$ENV{SPEEDY} -- -g t/scripts/group3 shift x pop`);
 $ok = defined($shift) && $shift eq 'shift' && defined($pop) && $pop eq 'pop';
-print $ok ? "ok\n" : "failed\n";
+print $ok ? "ok\n" : "not ok\n";
 
 utime time, time, 't/scripts/group1';
 $ENV{SPEEDY_GROUP} = 'a';

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -67,6 +67,12 @@ typedef struct {
 #define SPEEDY_PKGNAME	"CGI::SpeedyCGI"
 #define SPEEDY_PKG(s)	SPEEDY_PKGNAME "::" s
 
+#ifdef SPEEDY_EFENCE
+#   define SPEEDY_REALLOC_MULT 1
+#else
+#   define SPEEDY_REALLOC_MULT 2
+#endif
+
 #ifdef _WIN32
 typedef DWORD pid_t;
 #endif
@@ -85,4 +91,6 @@ typedef DWORD pid_t;
 #include "speedy_script.h"
 #include "speedy_circ.h"
 #include "speedy_cb.h"
-#include "speedy_perl.h"
+#ifdef SPEEDY_BACKEND
+#    include "speedy_perl.h"
+#endif

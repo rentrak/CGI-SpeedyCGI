@@ -27,7 +27,7 @@ sub doit2 { my $open_dev_null = shift;
     #print STDERR "second=",join(":", @second), "\n";
 
     if (@first != 1 || $first[0] ne $second[0]) {
-	print "fail\n";
+	print "not ok\n";
     } else {
 	print "ok\n";
     }

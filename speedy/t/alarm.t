@@ -10,7 +10,7 @@ print "1..2\n";
 
 # Test 1 - just print something
 my $line = `$ENV{SPEEDY} t/scripts/alarm`;
-print ($line =~ /fail/ ? "failed\n" : "ok\n");
+print ($line =~ /fail/ ? "not ok\n" : "ok\n");
 
 # Test 2 -
 my $pid1 = 0 + `$ENV{SPEEDY} t/scripts/alarm 1`;
@@ -19,5 +19,5 @@ my $pid2 = 0 + `$ENV{SPEEDY} t/scripts/alarm 1`;
 if ($pid1 > 0 && $pid1 == $pid2) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }

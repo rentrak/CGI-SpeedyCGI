@@ -2,7 +2,7 @@
 # Generate C-code and documentation from the optdefs file
 #
 #
-# Copyright (C) 2002  Sam Horrocks
+# Copyright (C) 2003  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License

@@ -26,5 +26,5 @@ my $two = &runit(2);
 if ($one == 1 && $two == 2) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }

@@ -19,6 +19,7 @@ sub onerun { my $use_stderr = shift;
 	close(STDIN);
 	if ($use_stderr) {
 	    close(STDOUT);
+	    $^W = 0;
 	    open(STDERR, ">$TMP");
 	} else {
 	    close(STDERR);
@@ -31,7 +32,7 @@ sub onerun { my $use_stderr = shift;
     if (`cat $TMP` ne '') {
 	print "ok\n";
     } else {
-	print "failed\n";
+	print "not ok\n";
     }
     unlink $TMP;
 }

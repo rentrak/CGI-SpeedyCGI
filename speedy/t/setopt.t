@@ -10,6 +10,6 @@ my $pid2 = `$cmd`;
 if ($pid1 > 0 && $pid2 > 0 && $pid1 != $pid2) {
     print "ok\n";
 } else {
-    print "failed\n";
+    print "not ok\n";
 }
 

@@ -3,7 +3,7 @@
 # Object used in the various Makefile.PL's
 #
 #
-# Copyright (C) 2002  Sam Horrocks
+# Copyright (C) 2003  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -33,10 +33,16 @@ use ExtUtils::Embed;
 use Cwd;
 use vars qw(@src_generated %write_makefile_common);
 
-# Turn these off in the distribution
-my $COVERAGE	= 0;	# Compile for coverage testing
-my $PROFILING	= 0;	# Compile for profiling
-my $DEVEL	= 0;	# Compile for debugging
+# Use the following for debugging, etc.
+#
+# $EFENCE - to help debug malloc, set this to the path of the patched
+# version of the efence  ElectriceFence-2.1 distribution can be patched
+# with util/patch_efence script to make it work with this code.
+#
+my $EFENCE	= 0;
+my $COVERAGE	= 0;		# Compile for coverage testing
+my $PROFILING	= 0;		# Compile for profiling
+my $DEVEL	= 0 || $EFENCE;	# Compile for debugging
 
 # Options to produce warnings
 my $WARNOPTS	= ' -pedantic -Wall -W -Wtraditional -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wcast-qual -Wwrite-strings -Wstrict-prototypes -Wredundant-decls -Wnested-externs ';
@@ -61,6 +67,9 @@ else {
     # Force -O here, because otherwise on Sun they use odd OPTIMIZE flags
     # that make gcc fail.
     $OPTIMIZE	= '-O';
+}
+if ($EFENCE) {
+    $OPTIMIZE .= " -DSPEEDY_EFENCE ";
 }
 
 my %macro;
@@ -319,7 +328,9 @@ sub check_syms_def {
 sub remove_libs { undef }
 
 sub get_ldopts {
-    "$LD_OPTS " . &ExtUtils::Embed::ldopts('-std');
+    $_ = "$LD_OPTS " . &ExtUtils::Embed::ldopts('-std');
+    $EFENCE && s/$/ $EFENCE/;
+    return $_;
 }
 sub get_ccopts {&ExtUtils::Embed::ccopts();}
 
@@ -334,7 +345,7 @@ all :: $my_name_val
 
 ${my_name_val}: \$(OBJECT)
 	\$(RM_F) ${my_name_val}
-	$remove_libs \$(LD) -o ${my_name_val} \$(OBJECT) $ldopts
+	$remove_libs \$(CC) -o ${my_name_val} \$(OBJECT) $ldopts
 	$check_syms
 	echo ''
     ";
@@ -343,9 +354,18 @@ ${my_name_val}: \$(OBJECT)
 sub devel {$DEVEL}
 
 sub apxs_query { my $var = shift;
-    my $val = `apxs -q $var 2>/dev/null`;
-    chomp $val;
-    return $? ? undef : $val;
+    my $val;
+    open(S, ">&STDERR");
+    open(STDERR, ">/dev/null");
+    $val = `apxs -q $var`;
+    if ($?) {
+	$val = undef;
+    } else {
+	chomp $val;
+    }
+    open(STDERR, ">&S");
+    close(S);
+    return $val;
 }
     
 sub apxs_works {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -172,15 +172,13 @@ int main(int argc, char **argv, char **_junk) {
 
     speedy_util_unlimit_core();
 
+    if (!(my_perl = perl_alloc()))
+        DIE_QUIET("Cannot allocate perl");
+    perl_construct(my_perl);
+
 #ifdef SPEEDY_DEBUG
     dont_fork = getenv("SPEEDY_NOPARENT") != NULL;
 #endif
-
-    /* Close off all I/O except for stderr (close it later) */
-    for (i = 32; i >= 0; --i) {
-	if (i != 2 && i != PREF_FD_LISTENER)
-	    (void) close(i);
-    }
 
     /*
      * Make sure fd's 0 and 1 are open.
@@ -198,6 +196,12 @@ int main(int argc, char **argv, char **_junk) {
 
     /* Initialize interpreter with this script */
     speedy_perl_init();
+
+    /* Close off all I/O except for stderr (close it later) */
+    for (i = 32; i >= 0; --i) {
+	if (i != 2 && i != PREF_FD_LISTENER)
+	    (void) close(i);
+    }
 
     /* Set up sigs */
     speedy_sig_init(&sl, oursigs, NUM_OURSIGS, SIG_BLOCK);
@@ -270,17 +274,3 @@ int main(int argc, char **argv, char **_junk) {
     return 0;
 }
 
-/*
- * Glue Functions
- */
-
-SPEEDY_INLINE void *speedy_malloc(size_t size) {
-    void *s;
-    New(123,s,size,char);
-    return s;
-}
-
-SPEEDY_INLINE void *speedy_realloc(void *ptr, size_t size) {
-    Renew(ptr, size, char);
-    return ptr;
-}

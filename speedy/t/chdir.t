@@ -54,7 +54,7 @@ sub doit { my($maxruns, $tocheck, $cdto) = @_;
     if ($tocheck & $DIR) {
 	$ok = $ok && $curdir eq $spdir[1];
     }
-    print $ok ? "ok\n" : "failed\n";
+    print $ok ? "ok\n" : "not ok\n";
 }
 
 &doit(2, $BOTH);

@@ -1,5 +1,21 @@
 Revision history for Perl extension SpeedyCGI.
 
+2.22	Sat Oct 11 20:34:15 PDT 2003
+
+	- Redhat9 fixes.
+
+	- Better support for setuid under Solaris.
+
+	- Fixes for HP-UX 11.22
+
+	- Fix for memory leak in speedy_backend reported by James H. Thompson
+
+	- speedy_file.c fixes for bugs reported by Dmitri Tikhonov
+
+	- Fix from Lars Thegler for buffer overrun in speedy_opt.c
+
+	- Add efence malloc debugging.
+
 2.21	Thu Sep 26 15:27:35 PDT 2002
 
 	- Fix too many backends problem reported by Theo Petersen.  The

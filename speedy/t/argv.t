@@ -11,7 +11,7 @@ sub evaluate {
     if ($_[0]) {
 	print "ok\n";
     } else {
-	print "failed\n";
+	print "not ok\n";
     }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -66,11 +66,12 @@ static void fd_change(int fd, int state) {
 
 static void fd_init(int fd, int flags, int state) {
     if (fd >= fdinfo_size) {
+#ifdef SPEEDY_EFENCE
+	fdinfo_size = fd + 1;
+#else
 	fdinfo_size = fd + 10;
-	if (fdinfo)
-	    speedy_new(fdinfo, fdinfo_size, fdinfo_t);
-	else
-	    speedy_renew(fdinfo, fdinfo_size, fdinfo_t);
+#endif
+	speedy_renew(fdinfo, fdinfo_size, fdinfo_t);
     }
     fdinfo[fd].flags = flags;
     fdinfo[fd].state = FD_UNKNOWN;
@@ -494,3 +495,23 @@ void speedy_abort(const char *s) {
     write(2, s, strlen(s));
     speedy_util_exit(1, 0);
 }
+
+#ifdef SPEEDY_EFENCE
+
+void *efence_malloc (size_t size);
+void efence_free (void *ptr);
+void *efence_realloc (void *ptr, size_t size);
+
+void * malloc (size_t size) {
+    return efence_malloc(size);
+}
+
+void free (void *ptr) {
+    efence_free(ptr);
+}
+
+void * realloc (void *ptr, size_t size) {
+    return efence_realloc(ptr, size);
+}
+
+#endif

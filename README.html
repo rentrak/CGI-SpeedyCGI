@@ -29,6 +29,7 @@
 		<LI><A HREF="#Source_Code_Installation">Source Code Installation</A>
 		<LI><A HREF="#Standard_Install">Standard Install</A>
 		<LI><A HREF="#Install_in_a_Different_Directory">Install in a Different Directory</A>
+		<LI><A HREF="#Setuid_Install">Setuid Install</A>
 		<LI><A HREF="#Apache_Installation">Apache Installation</A>
 		<LI><A HREF="#Apache_Configuration">Apache Configuration</A>
 	</UL>
@@ -79,7 +80,7 @@ SpeedyCGI - Speed up perl scripts by running them persistently.
 <PRE> #!/usr/bin/speedy
 </PRE>
 <P>
-<PRE> ### Your Script Here
+<PRE> ### Your Script Here.  For example:
  print &quot;Content-type: text/html\n\nHello World!\n&quot;;
 </PRE>
 <P>
@@ -156,8 +157,8 @@ within the web server - the perl interpreters still run outside the server.
 SpeedyCGI and PersistentPerl are currently both names for the same code.
 SpeedyCGI was the original name, but because people weren't sure what it
 did, the name PersistentPerl was picked as an alias. At some point
-SpeedyCGI will probably be replaced by PersistentPerl, or become a
-sub-class of PersistentPerl to avoid always having two distributions.
+SpeedyCGI will be replaced by PersistentPerl, or become a sub-class of
+PersistentPerl to avoid always having two distributions.
 
 <P>
 <HR>
@@ -518,9 +519,9 @@ Apache as documented in <A HREF="#Apache_Configuration">Apache Configuration</A>
 <HR>
 <H2><A NAME="Source_Code_Installation">Source Code Installation</A></H2>
 <P>
-To compile SpeedyCGI you will need perl 5.004 or later, and a C compiler,
-preferably the same one that your perl distribution was compiled with.
-SpeedyCGI is known to work under Solaris, Redhat Linux, FreeBSD and
+To compile SpeedyCGI you will need perl 5.005_03 or later, and a C
+compiler, preferably the same one that your perl distribution was compiled
+with. SpeedyCGI is known to work under Solaris, Redhat Linux, FreeBSD and
 OpenBSD. There may be problems with other OSes or earlier versions of Perl.
 SpeedyCGI may not work with threaded perl -- as of release 2.10, Linux and
 Solaris seem to work OK with threaded perl, but FreeBSD does not.
@@ -578,6 +579,49 @@ If you want to use the CGI::SpeedyCGI module in your code (it's not
 required), you will have to use ``use lib'' so it can be located.
 
 </UL>
+<P>
+<HR>
+<H2><A NAME="Setuid_Install">Setuid Install</A></H2>
+<P>
+SpeedyCGI has limited support for running setuid - installing this way may
+compromise the security of your system. To install setuid do the following:
+
+<UL>
+<LI>
+<P>
+Run ``perl Makefile.PL''
+
+</UL>
+<UL>
+<LI>
+<P>
+Edit speedy/Makefile and add ``-DIAMSUID'' to the end of the ``DEFINE = ''
+line.
+
+</UL>
+<UL>
+<LI>
+<P>
+Run make
+
+</UL>
+<UL>
+<LI>
+<P>
+Take the resulting ``speedy'' binary and install it suid-root as
+/usr/bin/speedy_suid
+
+</UL>
+<UL>
+<LI>
+<P>
+Change your setuid scripts to use /usr/bin/speedy_suid as the interpreter.
+
+</UL>
+<P>
+This has been know to work in Linux and FreeBSD. Solaris will work as long
+as the Group option is set to ``none''.
+
 <P>
 <HR>
 <H2><A NAME="Apache_Installation">Apache Installation</A></H2>
@@ -733,7 +777,7 @@ Here's a good explanation of the problem - it's for mod_perl, but the same
 thing applies to speedycgi:
 
 <P>
-<PRE>    <A HREF="http://perl.apache.org/faq/mod_perl_cgi.html#Variables_retain_their_value_fro">http://perl.apache.org/faq/mod_perl_cgi.html#Variables_retain_their_value_fro</A>
+<PRE>    <A HREF="http://perl.apache.org/docs/general/perl_reference/perl_reference.html#my___Scoped_Variable_in_Nested_Subroutines">http://perl.apache.org/docs/general/perl_reference/perl_reference.html#my___Scoped_Variable_in_Nested_Subroutines</A>
 </PRE>
 <P>
 If all else fails you can disable persistence by setting MaxRuns to 1. The
@@ -800,32 +844,33 @@ oracle is exec'ed.
 <H1><A NAME="USING_GROUPS">USING GROUPS</A></H1>
 <P>
 The group feature in SpeedyCGI can be used to help reduce the amount of
-memory used by the perl interpreters. When groups are not used (ie when
-group name is ``none''), each perl script is given its own set of perl
-interpreters, separate from the perl interpreters used for other scripts.
-In SpeedyCGI each perl interpreter is also a separate system process.
+memory used by the perl interpreters. By default groups are not used (group
+name is ``none''), and each perl script is given its own set of perl
+interpreters. Each perl interpreter is also a separate system process.
 
 <P>
-When grouping is used, perl interpreters are put into a group. All perl
-interpreters in that group can run perl scripts in that same group. What
-this means is that by putting all your scripts into one group, there could
-be one perl interpreter running all the perl scripts on your system. This
-can greatly reduce your memory needs when running lots of different perl
-scripts.
+When grouping is used, perl interpreters and perl scripts are put in a
+group. All perl interpreters in a group can run perl scripts in the same
+group. What this means is that by putting all your scripts into one group,
+there could be one perl interpreter running all the perl scripts on your
+system. This can greatly reduce your memory needs when running lots of
+different perl scripts.
 
 <P>
 SpeedyCGI group names are entities unto themselves. They are not associated
-with Unix groups, or with the Group directive in Apache. Group names are
-created by the person running SpeedyCGI based on their needs. There are two
-special group names ``none'' and ``default''. All other group names are
-created by the user of SpeedyCGI using the Group option described in <A HREF="#OPTIONS">OPTIONS</A>.
+with Unix groups, or with the Group directive in Apache. Expect for the two
+special group names ``none'' and ``default'', all group names are created
+by the user of SpeedyCGI using the Group option described in <A HREF="#OPTIONS">OPTIONS</A>
+
+
 
 <P>
-If you want to use the maximum amount of grouping possible (ie all scripts
-in the same interpreter), then you should always use the group name
-``default''. When you do this, you will get the fewest number of perl
-interpreters possible. Each perl interpreter will be able to run any of
-your perl scripts.
+If you want the maximum amount of grouping possible then you should run all
+scripts with the group option set to ``default''. This the group name used
+if you just specify ``-g'' on the command line without an explicit group
+name. When you do this, you will get the fewest number of perl interpreters
+possible - any perl interpreter will be able to run any of your perl
+scripts.
 
 <P>
 Although using group ``default'' for all scripts results in the most
@@ -835,37 +880,36 @@ this. You may want to use other group names for the following reasons:
 <UL>
 <LI><STRONG><A NAME="item_To">To isolate misbehaving scripts, or scripts that don't work in groups.</A></STRONG>
 <P>
-Some scripts cannot work in groups. When perl scripts are grouped together
+Some scripts won't work in groups. When perl scripts are grouped together
 they are each given their own unique package name - they are not run out of
 the ``main'' package as they normally would be. So, for example, a script
 that explicitly uses ``main'' somewhere in its code to find its subroutines
 or variables probably won't work in groups. In this case, it's probably
-best to run such a script with group ``none'', so it is compiled and run
-out of package main, and always given its own interpreter.
+best to run such a script with group ``none'', so it's compiled and run out
+of package main, and always given its own interpreter.
 
 <P>
-Other scripts may make changes to included packages, etc, that may break
-other scripts running in the same interpreter. In this case such scripts
-can be given their own group name (like group name ``pariah'') to keep them
-away from other scripts that they are incompatible with. The rest of your
-scripts can then run out of group ``default''. This will ensure that the
-``pariah'' scripts won't run within the same interpreter as your other
-scripts.
+In other cases, scripts may make changes to included packages, etc, that
+may break other scripts running in the same interpreter. In this case such
+scripts can be given their own group name (like ``pariah'') to keep them
+away from scripts they are incompatible with. The rest of your scripts can
+then run out of group ``default''. This will ensure that the ``pariah''
+scripts won't run within the same interpreter as the other scripts.
 
 </UL>
 <UL>
 <LI><STRONG><A NAME="item_To">To pass different perl or SpeedyCGI parameters to different scripts.</A></STRONG>
 <P>
-You may want to use separate groups to create separate policies for
+You may want to use separate groups to create different policies for
 different scripts.
 
 <P>
-Say you have an email application that contains ten perl scripts, and since
-the common perl code used in this application has a bad memory leak, you
-want to use a MaxRuns setting of 5 for all of these scripts. You then want
-all your other scripts to run in a separate group with a normal MaxRuns
-policy. What you can do is edit the ten email scripts, and at the top, put
-in the line:
+For example, you may have an email application that contains ten perl
+scripts, and since the common perl code used in this application has a bad
+memory leak, you want to use a MaxRuns setting of 5 for all of these
+scripts. You want to run all your other scripts with a normal MaxRuns
+setting. To accomplish this you can edit the ten email application scripts,
+and at the top use the line:
 
 <P>
 <PRE>    #!/usr/bin/speedy -- -gmail -r5
@@ -880,7 +924,7 @@ In the rest of your perl scripts you can use:
 What this will do is put the ten email scripts into a group of their own
 (named ``mail'') and give them all the default MaxRuns value of 5. All
 other scripts will be put into the group named ``default'', and this group
-will have the normal MaxRuns setting.
+will have a normal MaxRuns setting.
 
 </UL>
 <P>
@@ -1070,7 +1114,7 @@ HREF="http://daemoninc.com/SpeedyCGI/yapc_2001/">http://daemoninc.com/SpeedyCGI/
 <HR>
 <H1><A NAME="COPYRIGHT">COPYRIGHT</A></H1>
 <P>
-Copyright (C) 2002 Sam Horrocks
+Copyright (C) 2003 Sam Horrocks
 
 <P>
 This program is free software; you can redistribute it and/or modify it

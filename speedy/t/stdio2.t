@@ -31,7 +31,7 @@ for (my $j = 0; $j < 2; ++$j) {
 	    }
 	}
 	close(F);
-	print $ok ? "ok\n" : "failed\n";
+	print $ok ? "ok\n" : "not ok\n";
 
 	unlink($tmp);
     }

@@ -10,4 +10,4 @@ for (my $i = $numruns; $i > 0; --$i) {
     sleep 2;
     $num = `$ENV{SPEEDY} $scr`;
 }
-print ($num == $numruns ? "ok\n" : "failed\n");
+print ($num == $numruns ? "ok\n" : "not ok\n");

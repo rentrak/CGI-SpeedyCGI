@@ -50,6 +50,7 @@ speedy/t/basic1.t
 speedy/t/basic2.t
 speedy/t/begin_block.t
 speedy/t/begin_dup.t
+speedy/t/be_memleak.t
 speedy/t/cgi_reset.t
 speedy/t/chdir.t
 speedy/t/detach.t
@@ -69,6 +70,7 @@ speedy/t/scripts/basic.1
 speedy/t/scripts/basic.2
 speedy/t/scripts/begin_block
 speedy/t/scripts/begin_dup
+speedy/t/scripts/be_memleak
 speedy/t/scripts/cgi_reset
 speedy/t/scripts/chdir
 speedy/t/scripts/detach
@@ -152,6 +154,7 @@ util/build_package
 util/build_rpms
 util/build_solpkg
 util/check_syms
+util/patch_efence
 util/perlvars
 util/README
 util/remove_libs

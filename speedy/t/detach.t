@@ -35,7 +35,7 @@ sub doit { my $sz = shift;
 }
 
 sub result { my $ok = shift;
-    print $ok ? "ok\n" : "failed\n";
+    print $ok ? "ok\n" : "not ok\n";
 }
 
 print "1..2\n";

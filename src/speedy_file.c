@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2002  Sam Horrocks
+ * Copyright (C) 2003  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -136,7 +136,6 @@ static void fix_suspect_fd(void) {
     if (fstat(file_fd, &file_stat) == -1) speedy_util_die("fstat")
 
 static void remove_file(int is_corrupt) {
-    FILE_HEAD.file_removed = 1;
 #ifdef SPEEDY_DEBUG
     if (is_corrupt) {
 	/* Keep the file for debugging */
@@ -146,14 +145,15 @@ static void remove_file(int is_corrupt) {
 	gettimeofday(&tv, NULL);
 	sprintf(newname, "%s.corrupt.%d.%06d.%d",
 	    file_name, (int)tv.tv_sec, (int)tv.tv_usec, getpid());
-	rename(file_name, newname);
+	if (rename(file_name, newname) == -1)
+	    speedy_util_die("rename temp file");
+	FILE_HEAD.file_removed = 1;
 	DIE_QUIET("temp file corrupt");
-    } else {
-	unlink(file_name);
     }
-#else
-    unlink(file_name);
 #endif
+    if (unlink(file_name) == -1 && errno != ENOENT)
+	speedy_util_die("unlink temp file");
+    FILE_HEAD.file_removed = 1;
 }
 
 static void str_replace(char **ptr, char *newval) {
@@ -183,7 +183,7 @@ static void file_lock(void) {
 	file_close2();
     }
 
-    for (tries = 5; tries--;) {
+    for (tries = 5; tries; --tries) {
 	/* If file is not open, open it */
 	if (file_fd == -1) {
 	    str_replace(&saved_tmpbase, speedy_util_strdup(OPTVAL_TMPBASE));

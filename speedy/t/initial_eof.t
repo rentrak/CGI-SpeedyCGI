@@ -6,16 +6,16 @@
 
 print "1..2\n";
 
-sub wakeup { print "failed\n"; exit }
+sub wakeup { print "not ok\n"; exit }
 
 $SIG{ALRM} = \&wakeup;
 
 alarm(3);
 my $line = `$ENV{SPEEDY} t/scripts/initial_eof </dev/null`;
-print $line =~ /ok/ ? "ok\n" : "failed\n";
+print $line =~ /ok/ ? "ok\n" : "not ok\n";
 
 alarm(3);
 $line = `$ENV{SPEEDY} t/scripts/initial_eof <t/scripts/initial_eof >/dev/null`;
-print $? ? "failed\n" : "ok\n";
+print $? ? "not ok\n" : "ok\n";
 
 alarm(0);

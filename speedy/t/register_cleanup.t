@@ -17,7 +17,7 @@ sub doit { my($arg, $result) = @_;
     my @lines = `$ENV{SPEEDY} $scr $arg`;
     #print STDERR "script returned:\n", @lines;
     my $ok = join('', @lines) eq $result;
-    print $ok ? "ok\n" : "failed\n";
+    print $ok ? "ok\n" : "not ok\n";
 }
 
 &doit(1, "1\n2\n3\n4\n");
