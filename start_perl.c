@@ -53,14 +53,17 @@ typedef struct {
 static char *do_listen(
     SpeedyQueue *q, PersistInfo *pinfo, int *lstn
 );
-static void doit(int lstn, char **perl_argv, OptsRec *opts);
-static void onerun(int s, int secret_word, int mypid, PerlVars *pv);
+static void doit(
+    int lstn, char **perl_argv, OptsRec *opts, int curdir
+);
+static void onerun(int secret_word, int mypid, PerlVars *pv);
 static int get_string(PerlIO *pio_in, char **buf);
 static void tryexit();
 static void doabort();
 static void all_done();
 static Signal_t wakeup(int x);
 static SV *my_newSVpvn(char *s, int l);
+static void set_sigs();
 
 
 char *speedy_start_perl(
@@ -68,7 +71,7 @@ char *speedy_start_perl(
 )
 {
     char *errmsg;
-    int lstn, i;
+    int lstn, i, curdir;
 
     /* Copy into globals */
     g_q		= q;
@@ -92,20 +95,23 @@ char *speedy_start_perl(
 	if (i != lstn && i != 2) close(i);
     }
 
+    /* Catch signals */
+    set_sigs();
+
     /* Force the listener to fd-3 to stay clear of stdio */
     dup2(lstn, 3);
     if (lstn != 3) close(lstn);
     lstn = 3;
 
-    /* Catch pesky signals */
-    rsignal(SIGPIPE, &doabort);
-    rsignal(SIGTERM, &doabort);
-    rsignal(SIGHUP,  &doabort);
-    rsignal(SIGINT,  &doabort);
-    rsignal(SIGQUIT, &doabort);
+    /* Need to remember current directory */
+    if ((curdir = open(".", O_RDONLY, 0)) != 1) {
+	dup2(curdir, 4);
+	if (curdir != 4) close(curdir);
+	curdir = 4;
+    }
 
     /* Do it */
-    doit(lstn, perl_argv, opts);
+    doit(lstn, perl_argv, opts, curdir);
     return "notreached";
 }
 
@@ -135,8 +141,10 @@ static char *do_listen(SpeedyQueue *q, PersistInfo *pinfo, int *lstn) {
     return NULL;
 }
 
-static void doit(int lstn, char **perl_argv, OptsRec *opts) {
-    int s, len, numruns, maxruns;
+static void doit(
+    int lstn, char **perl_argv, OptsRec *opts, int curdir
+) {
+    int s, e, len, numruns, maxruns;
     struct sockaddr_in sa;
     int mypid = getpid();
     PerlVars pv;
@@ -159,6 +167,8 @@ static void doit(int lstn, char **perl_argv, OptsRec *opts) {
     }
 
     /* Time to close stderr */
+    do_close(pv.pv_stdin,  TRUE);
+    do_close(pv.pv_stdout, TRUE);
     do_close(pv.pv_stderr, TRUE);
 
     /* We are not in the queue yet. Parent will connect without using queue. */
@@ -176,16 +186,23 @@ static void doit(int lstn, char **perl_argv, OptsRec *opts) {
 	len = sizeof(sa);
 	if ((s = accept(lstn, (struct sockaddr*)&sa, &len)) == -1) doabort();
 	g_queued = 0;
+	dup2(s,0); dup2(s,1); if (s > 1) close(s);
+
+	if ((e = accept(lstn, (struct sockaddr*)&sa, &len)) == -1) doabort();
+	dup2(e,2); if (e != 2) close(e);
 
 	/* Turn off timeout */
 	if (g_alarm) {
 	    alarm(0);
-	    rsignal(SIGALRM, SIG_DFL);
+	    rsignal(SIGALRM, &doabort);  
 	    g_alarm = 0;
 	}
 
 	/* Do one run through the script. */
-	onerun(s, g_q->secret_word, mypid, &pv);
+	onerun(g_q->secret_word, mypid, &pv);
+
+	/* Make sure we cd back to the correct directory */
+	if (curdir != -1) fchdir(curdir);
 
 	/* See if we've gone over the maxruns */
 	if ((maxruns = OVAL_INT(opts[OPT_MAXRUNS])) > 0) {
@@ -200,19 +217,20 @@ static void doit(int lstn, char **perl_argv, OptsRec *opts) {
 
 
 /* One run of the perl process, do stdio using socket. */
-static void onerun(int s, int secret_word, int mypid, PerlVars *pv) {
+static void onerun(int secret_word, int mypid, PerlVars *pv) {
     int sz, i, cmd_done, par_secret;
     char *buf;
     char *emptyargs[] = {NULL};
-    PerlIO *pio_in, *pio_out;
+    PerlIO *pio_in, *pio_out, *pio_err;
 
     /* Set up stdio */
-    dup2(s,0);  if (!(pio_in  = PerlIO_fdopen(0, "r"))) doabort();
-    dup2(s,1);  if (!(pio_out = PerlIO_fdopen(1, "w"))) doabort();
-    if (s > 1) close(s);
+    if (!(pio_in  = PerlIO_fdopen(0, "r"))) doabort();
+    if (!(pio_out = PerlIO_fdopen(1, "w"))) doabort();
+    if (!(pio_err = PerlIO_fdopen(2, "w"))) doabort();
 
     IoIFP(GvIOp(pv->pv_stdin))  = IoOFP(GvIOp(pv->pv_stdin))  = pio_in;
     IoIFP(GvIOp(pv->pv_stdout)) = IoOFP(GvIOp(pv->pv_stdout)) = pio_out;
+    IoIFP(GvIOp(pv->pv_stderr)) = IoOFP(GvIOp(pv->pv_stderr)) = pio_err;
     setdefout(pv->pv_stdout);
 
     /* Get secret word from parent. */
@@ -277,19 +295,24 @@ static void onerun(int s, int secret_word, int mypid, PerlVars *pv) {
 
     /* Flush any stdout. */
     PerlIO_flush(PerlIO_stdout());
-
+    PerlIO_flush(PerlIO_stderr());
+                    
     /* Shutdown stdio */
     do_close(pv->pv_stdin,  TRUE);
     do_close(pv->pv_stdout, TRUE);
+    do_close(pv->pv_stderr, TRUE);
 
     /* Get rid of any buffered stdin. */
     while (PerlIO_getc(PerlIO_stdin()) != -1)
-	;
+        ;   
 
     /* Hack for CGI.pm */
     if (perl_get_cv(CGI_CLEANUP, 0)) {
 	perl_call_argv(CGI_CLEANUP, G_DISCARD | G_NOARGS, emptyargs);
     }
+
+    /* Reset signals */
+    set_sigs();
 }
 
 /* Read in a string on stdin. */
@@ -359,4 +382,13 @@ static void all_done() {
 static SV *my_newSVpvn(char *s, int l) {
     if (l == 0) return newSVpv("",0);
     return newSVpv(s, l);
+}
+
+/* Catch pesky signals */
+static void set_sigs() {
+    rsignal(SIGPIPE, &doabort);
+    rsignal(SIGALRM, &doabort);
+    rsignal(SIGTERM, &doabort);
+    rsignal(SIGHUP,  &doabort);
+    rsignal(SIGINT,  &doabort);
 }

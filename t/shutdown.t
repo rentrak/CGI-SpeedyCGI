@@ -1,10 +1,15 @@
 
+# Tests the shutdown handler feature.
+
 print "1..2\n";
 
 my $sp = './speedy';
 
 my $testf = "/tmp/speedy.shutdown_done.$$";
+my $scr = 't/scripts/shutdown';
 unlink($testf);
+
+utime time, time, $scr;
 
 sub run {
     `$sp -- -r2 t/scripts/shutdown $testf`

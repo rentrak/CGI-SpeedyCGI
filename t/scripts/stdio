@@ -1,0 +1,13 @@
+
+# Take in list of numbers, one per line, echo list to stdout or stderr.
+
+my $out = $ARGV[0] ? \*STDERR : \*STDOUT;
+
+my $sum;
+while (<STDIN>) {
+    print $out $_;
+    $sum += $_;
+}
+close(STDOUT);
+close(STDIN);
+close(STDERR);

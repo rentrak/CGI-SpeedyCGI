@@ -9,7 +9,7 @@ xsinit('xsinit.c');
 WriteMakefile(
     NAME		=> 'CGI::SpeedyCGI',
     OBJECT		=> 'copybuf.o util.o start_perl.o opts.o queue.o
-			    speedy.o xsinit.o',
+			    speedy.o xsinit.o speedy_poll.o',
     VERSION_FROM	=> 'lib/CGI/SpeedyCGI.pm',
     MAP_TARGET		=> 'speedy',
 );

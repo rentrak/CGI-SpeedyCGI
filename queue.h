@@ -36,7 +36,7 @@
 /* Persistent info stored in lock file */
 typedef struct {
     char		*fname;		/* Queue file name */
-    time_t		ctime;		/* Ctime of procs in the queue */
+    time_t		mtime;		/* Mtime of procs in the queue */
     int			secret_word;	/* Say the secret word */
     struct timeval	*start_time;
 } SpeedyQueue;

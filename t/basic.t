@@ -9,9 +9,11 @@ my $line = `$sp t/scripts/basic.1 $str`;
 print ($line eq $str ? "ok\n" : "failed\n");
 
 # Test 2
+my $scr = 't/scripts/basic.2';
 my $num;
-system("touch t/scripts/basic.2");
+utime time, time, $scr;
+sleep 2;
 for (my $i = 9; $i > 0; --$i) {
-    $num = `$sp t/scripts/basic.2`;
+    $num = `$sp $scr`;
 }
 print ($num == 9 ? "ok\n" : "failed\n");

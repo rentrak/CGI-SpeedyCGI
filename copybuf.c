@@ -36,9 +36,12 @@
 
 #include "speedy.h"
 
-void speedy_cb_alloc(CopyBuf *bp, int maxsz, int rdfd, int wrfd) {
-    bp->buf	= NULL;
-    bp->sz	= 0;
+void speedy_cb_alloc(
+    CopyBuf *bp, int maxsz, int rdfd, int wrfd, char *buf, int sz
+)
+{
+    bp->buf	= buf;
+    bp->sz	= sz;
     bp->maxsz	= maxsz;
     bp->eof	= 0;
     bp->rdfd	= rdfd;
@@ -85,5 +88,8 @@ void speedy_cb_write(CopyBuf *bp) {
 	else if (bp->eof) {
 	    speedy_cb_free(bp);
 	}
+    }
+    else if (n == -1) {
+	bp->sz = 0;
     }
 }

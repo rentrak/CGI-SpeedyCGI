@@ -74,9 +74,6 @@
 #include <fcntl.h>
 #endif
 
-/* Poll */
-#include <poll.h>
-
 /* Found in pp_sys.c... */
    /* fcntl.h might not have been included, even if it exists, because
       the current Configure only sets I_FCNTL if it's needed to pick up
@@ -104,6 +101,7 @@ typedef struct {
 #include "queue.h"
 #include "util.h"
 #include "start_perl.h"
+#include "speedy_poll.h"
 
 #define OPT_BUFSZ_POST	0
 #define OPT_BUFSZ_GET	1

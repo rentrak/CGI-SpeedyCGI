@@ -38,7 +38,7 @@
 
 /* Info stored at the front of the file */
 typedef struct {
-    time_t	ctime;		/* Ctime for pinfo's in the queue */
+    time_t	mtime;		/* Mtime for pinfo's in the queue */
     int		len;		/* Number of pinfo's in the queue */
     int		secret_word;	/* Say the secret word */
 } FileInfo;
@@ -93,7 +93,7 @@ char *speedy_q_init(
 
     /* Make a new queue */
     q->fname		= fname;
-    q->ctime		= stbuf.st_ctime;
+    q->mtime		= stbuf.st_mtime;
     q->start_time	= start_time;
 
     return NULL;
@@ -133,7 +133,7 @@ char *speedy_q_add(SpeedyQueue *q, PersistInfo *pinfo) {
     if ((retval = open_queue(q, &finfo, &fh))) return retval;
 
     /* If we are adding an out-of-date process, fail */
-    if (q->ctime < finfo.ctime) return "file-changed";
+    if (q->mtime < finfo.mtime) return "file-changed";
 
     /* Write to end of queue */
     retval = write_pinfo(&fh, pinfo, finfo.len++);
@@ -146,10 +146,12 @@ char *speedy_q_add(SpeedyQueue *q, PersistInfo *pinfo) {
     return retval;
 }
 
+/* Take the last entry out of the queue */
 char *speedy_q_get(SpeedyQueue *q, PersistInfo *pinfo) {
     return q_get(q, pinfo, 0);
 }
 
+/* Take myself out of the queue */
 char *speedy_q_getme(SpeedyQueue *q, PersistInfo *pinfo) {
     return q_get(q, pinfo, 1);
 }
@@ -234,7 +236,7 @@ static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh) {
 	    fh->maddr = mmap(
 		0, MMAP_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fh->fd, 0
 	    );
-	    if (fh->maddr == MAP_FAILED) {
+	    if (fh->maddr == (char *)MAP_FAILED) {
 		close(fh->fd);
 		return "mmap";
 	    }
@@ -254,7 +256,7 @@ static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh) {
 	    char *retval;
 
 	    finfo->len		= 0;
-	    finfo->ctime	= q->ctime;
+	    finfo->mtime	= q->mtime;
 	    finfo->secret_word	= speedy_make_secret(q->start_time);
 
 	    if ((retval = write_finfo(fh, finfo))) {
@@ -274,10 +276,10 @@ static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh) {
 	}
     }
 
-    /* If file has older ctime, shut down all procs in it. */
-    if (finfo->ctime < q->ctime) {
+    /* If file has older mtime, shut down all procs in it. */
+    if (finfo->mtime < q->mtime) {
 	do_shutdown(q, fh, finfo);
-	finfo->ctime = q->ctime;
+	finfo->mtime = q->mtime;
     }
 
     return NULL;
@@ -285,7 +287,7 @@ static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh) {
 
 static void close_queue(FileHandle *fh) {
 #   ifdef DO_MMAP
-	if (fh->maddr != MAP_FAILED) {
+	if (fh->maddr != (char *)MAP_FAILED) {
 	    munmap(fh->maddr, MMAP_SIZE);
 	}
 #   endif
@@ -294,12 +296,13 @@ static void close_queue(FileHandle *fh) {
 
 static void do_shutdown(SpeedyQueue *q, FileHandle *fh, FileInfo *finfo) {
     PersistInfo pinfo;
-    int s;
+    int s, e;
     char buf[sizeof(int)+1];
 
     while (finfo->len) {
 	if (read_pinfo(fh, &pinfo, --finfo->len) == NULL) {
 	    s = speedy_connect(pinfo.port);
+	    e = speedy_connect(pinfo.port);
 	    if (s != -1) {
 		/* Kiss of death */
 		Copy(&(q->secret_word), buf, 1, int);
@@ -322,7 +325,7 @@ static char *write_finfo(FileHandle *fh, FileInfo *finfo) {
 }
 
 #define DOSEEK(fh, idx) \
-    lseek((fd), sizeof(FileInfo) + (idx) * sizeof(PersistInfo), SEEK_SET)
+    lseek((fh->fd), sizeof(FileInfo) + (idx) * sizeof(PersistInfo), SEEK_SET)
 
 #define GETADDR(p, fh, idx) \
     (p) = (fh->maddr + sizeof(FileInfo) + (idx) * sizeof(PersistInfo)); \

@@ -43,12 +43,13 @@ static char *doit(
     char *perl_argv[], char *envp[], char *scr_argv[],
     struct timeval *start_time
 );
-static char *comm_init(
-    unsigned short port, char *envp[], char *scr_argv[], int secret_word, int *s
+static char *comm_init(unsigned short port, int *s, int *e);
+static char *communicate(
+    int s, int e, char *envp[], char *scr_argv[], int secret_word
 );
-static char *communicate(int s);
-static char *sendenv(
-    int s, char *envp[], char *scr_argv[], int secret_word, int doexit
+static int sendenv_size(char *envp[], char *scr_argv[]);
+static void sendenv_fill(
+    char *buf, char *envp[], char *scr_argv[], int secret_word
 );
 static void add_strings(char **bp, char **p);
 static int array_bufsize(char **p);
@@ -124,7 +125,8 @@ static char *handler_env(char *p[]) {
     char **path_trans = NULL, **path_info = NULL, **script_name = NULL;
     char *retval;
 
-    /* Traverse the environment to find locations of variables and end-of-list */
+    /* Traverse the environment to find locations of variables and end-of-list
+     */
     for (; *p; ++p) {
 	if (!path_info && strncmp(*p, PINFO, sizeof(PINFO)-1) == 0) {
 	    path_info = p;
@@ -181,7 +183,7 @@ static char *doit(
     char *retval;
     SpeedyQueue q;
     PersistInfo pinfo;
-    int s;
+    int s, e;
 
     /* Create new queue */
     if ((retval = speedy_q_init(&q, opts, scr_argv[0], start_time)))
@@ -189,71 +191,87 @@ static char *doit(
 
     /* Get proc out of the queue and init communication */
     retval = speedy_q_get(&q, &pinfo);
-    if (!retval) 
-	 retval = comm_init(pinfo.port, envp, scr_argv, q.secret_word, &s);
+    if (!retval) retval = comm_init(pinfo.port, &s, &e);
 
     /* If failed, create a new process. */
     if (retval) {
 	retval = speedy_start_perl(&q, perl_argv, opts, &pinfo);
-	if (!retval)
-	    retval = comm_init(pinfo.port, envp, scr_argv, q.secret_word, &s);
+	if (!retval) retval = comm_init(pinfo.port, &s, &e);
 	if (retval) goto doit_done;
     }
 
     /* Communicate */
-    retval = communicate(s);
+    retval = communicate(s, e, envp, scr_argv, q.secret_word);
 
 doit_done:
     speedy_q_free(&q);
     return retval;
 }
 
-static char *comm_init(
-    unsigned short port, char *envp[], char *scr_argv[], int secret_word, int *s
-)
-{
-    char *retval;
-    /* Connect up */
+static char *comm_init(unsigned short port, int *s, int *e) {
     CHKERR2(*s, speedy_connect(port), "connect failed");
-
-    /* Send over environment. */
-    if ((retval = sendenv(*s, envp, scr_argv, secret_word, 0)))
+    if ((*e = speedy_connect(port)) == -1) {
 	close(*s);
-
-    return retval;
+	return "connect failed";
+    }
+    return NULL;
 }
 
-static char *communicate(int s) {
-    CopyBuf ibuf, obuf;
-    int did_shutdown;
-    struct pollfd fds[3];
 
-    /*	fd0 -> ibuf -> s */
-    /*	s   -> obuf -> fd1 */
-    const int ibuf_rd_idx = 0, ibuf_wr_idx = 2;
-    const int obuf_rd_idx = 2, obuf_wr_idx = 1;
-    fds[0].fd = 0;
-    fds[1].fd = 1;
-    fds[2].fd = s;
+static char *communicate(
+    int s, int e, char *envp[], char *scr_argv[], int secret_word
+)
+{
+#   define NUMCBUFS 3
+    CopyBuf ibuf, obuf, ebuf;
+    CopyBuf *cbs[NUMCBUFS] = {&ibuf, &obuf, &ebuf};
+    PollInfo pi;
+    char *ibuf_buf;
+    int env_sz, ibuf_sz, did_shutdown;
+
+    /* Find out the space we need for IBUF to fit the environment */
+    env_sz = sendenv_size(envp, scr_argv);
+    ibuf_sz = OVAL_INT(opts[OPT_BUFSZ_POST]);
+    if (env_sz + 512 > ibuf_sz) ibuf_sz = env_sz + 512;
+
+    /* Alloc buf, and fill in with env data */
+    New(123, ibuf_buf, ibuf_sz, char);
+    sendenv_fill(ibuf_buf, envp, scr_argv, secret_word);
+
+    speedy_poll_init(&pi, s > e ? s : e);
 
     /* Allocate buffers for copying below: */
+    /*	fd0 -> ibuf -> s	*/
+    /*	s   -> obuf -> fd1	*/
+    /*	e   -> ebuf -> fd2	*/
     speedy_cb_alloc(
 	&ibuf,
-	OVAL_INT(opts[OPT_BUFSZ_POST]),
-	fds[ibuf_rd_idx].fd,
-	fds[ibuf_wr_idx].fd
+	ibuf_sz,
+	0,
+	s,
+	ibuf_buf,
+	env_sz
     );
     speedy_cb_alloc(
 	&obuf,
 	OVAL_INT(opts[OPT_BUFSZ_GET]),
-	fds[obuf_rd_idx].fd,
-	fds[obuf_wr_idx].fd
+	s,
+	1,
+	NULL,
+	0
+    );
+    speedy_cb_alloc(
+	&ebuf,
+	512,
+	e,
+	2,
+	NULL,
+	0
     );
 
-
-    /* Do multiplexing - continue until done sending stdout only. */
-    /* CGI may not take data from its stdin. */
-    for (did_shutdown = 0; !COPYDONE(obuf);) {
+    /* Copy streams */
+    for (did_shutdown = 0; !COPYDONE(obuf) || !COPYDONE(ebuf);) {
+	int i;
 
 	/* See if we should shutdown the CGI's stdin. */
 	if (!did_shutdown && COPYDONE(ibuf)) {
@@ -262,82 +280,79 @@ static char *communicate(int s) {
 	}
 
 	/* Reset events */
-	fds[0].events = fds[1].events = fds[2].events = 0;
+	speedy_poll_reset(&pi);
 	
-	/* Set read events */
-	if (CANREAD(ibuf))  fds[ibuf_rd_idx].events |= POLLIN;
-	if (CANREAD(obuf))  fds[obuf_rd_idx].events |= POLLIN;
-
-	/* Set write events */
-	if (CANWRITE(ibuf)) fds[ibuf_wr_idx].events |= POLLOUT;
-	if (CANWRITE(obuf)) fds[obuf_wr_idx].events |= POLLOUT;
+	/* Set read/write events */
+	for (i = 0; i < NUMCBUFS; ++i) {
+	    CopyBuf *b = cbs[i];
+	    if ( CANREAD(*b)) speedy_poll_set(&pi, b->rdfd, SPEEDY_POLLIN);
+	    if (CANWRITE(*b)) speedy_poll_set(&pi, b->wrfd, SPEEDY_POLLOUT);
+	}
 
 	/* Poll... */
-	CHKERR(poll(fds, 3, -1), "poll");
+	CHKERR(speedy_poll_wait(&pi, -1), "poll");
 
-	/* Do reads */
-	if (fds[ibuf_rd_idx].revents & POLLIN)  speedy_cb_read(&ibuf);
-	if (fds[obuf_rd_idx].revents & POLLIN)  speedy_cb_read(&obuf);
+	/* Do reads/writes */
+	for (i = 0; i < NUMCBUFS; ++i) {
+	    CopyBuf *b = cbs[i];
 
-	/* Do writes */
-	if (fds[ibuf_wr_idx].revents & POLLOUT) speedy_cb_write(&ibuf);
-	if (fds[obuf_wr_idx].revents & POLLOUT) speedy_cb_write(&obuf);
+	    if (speedy_poll_isset(&pi, b->rdfd, SPEEDY_POLLIN))
+		speedy_cb_read(b);
+	    if (speedy_poll_isset(&pi, b->wrfd, SPEEDY_POLLOUT))
+		speedy_cb_write(b);
+	}
     }
 
     /* Cleanup and return */
+    speedy_poll_free(&pi);
     speedy_cb_free(&ibuf);
     speedy_cb_free(&obuf);
+    speedy_cb_free(&ebuf);
     close(s);
+    close(e);
     close(0);
     close(1);
+    close(2);
     return NULL;
+}
+
+/* Find out how big a buffer we need for sending environment.*/
+static int sendenv_size(char *envp[], char *scr_argv[]) {
+    return sizeof(int) +			/* secret-word */
+	   1 + array_bufsize(envp) +		/* env */
+	   1 + array_bufsize(scr_argv+1) +	/* argv */
+	   1;					/* terminator */
+}
+
+/* Return the size of buffer needed to send array. */
+static int array_bufsize(char **p) {
+    int l, sz = sizeof(int);	/* bytes for terminator */
+    for (; *p; ++p) {
+	if ((l = strlen(*p))) sz += sizeof(int) + l;
+    }
+    return sz;
 }
 
 #define ADD(s,d,l,t) Copy(s,d,l,t); (d) += ((l)*sizeof(t))
 
-static char *sendenv(
-    int s, char *envp[], char *scr_argv[], int secret_word, int doexit
+/* Fill in the environment to send. */
+static void sendenv_fill(
+    char *buf, char *envp[], char *scr_argv[], int secret_word
 )
 {
-    char *buf, *bp, *retval = NULL;
-    int sz, nwritten, n;
-
-    /* Find out how big a buffer we need */
-    sz = sizeof(int) + 1;	/* secret-word plus final command */
-    if (!doexit) {
-	sz += 1+array_bufsize(envp) + 1+array_bufsize(scr_argv+1);
-    }
-
-    /* Allocate buffer */
-    New(123, buf, sz, char);
-    bp = buf;
-
     /* Add secret word */
-    ADD(&secret_word, bp, 1, int);
+    ADD(&secret_word, buf, 1, int);
 
     /* Put env into buffer */
-    *bp++ = 'E';
-    add_strings(&bp, envp);
+    *buf++ = 'E';
+    add_strings(&buf, envp);
 
     /* Put argv into buffer */
-    *bp++ = 'A';
-    add_strings(&bp, scr_argv+1);
+    *buf++ = 'A';
+    add_strings(&buf, scr_argv+1);
 
     /* End */
-    *bp++ = ' ';
-
-    /* Write */
-    for (nwritten = 0; nwritten < sz; nwritten += n) {
-	if ((n = write(s, buf+nwritten, sz-nwritten)) == -1) {
-	    retval = "env protocol failure";
-	    goto sendenv_done;
-	}
-    }
-
-    /* Cleanup and exit */
-sendenv_done:
-    Safefree(buf);
-    return retval;
+    *buf++ = ' ';
 }
 
 /* Copy a block of strings into the buffer,  */
@@ -355,13 +370,4 @@ static void add_strings(char **bp, char **p) {
     /* Terminate with zero-length string */
     l = 0;
     ADD(&l, *bp, 1, int);
-}
-
-/* Return the size of buffer needed to send array. */
-static int array_bufsize(char **p) {
-    int l, sz = sizeof(int);	/* bytes for terminator */
-    for (; *p; ++p) {
-	if ((l = strlen(*p))) sz += sizeof(int) + l;
-    }
-    return sz;
 }

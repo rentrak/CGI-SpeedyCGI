@@ -1,5 +1,27 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+1.6  Sun Apr  4 18:18:25 PDT 1999
+
+	- added support for stderr.
+
+	- make sure to cd back to original directory after each perl run.
+
+	- signals are now reset between every request.
+
+	- wrote speedy_poll.c -- allows compilation for
+	  either poll or select, using defines USE_POLL or USE_SELECT.
+	  Default is poll for sysv & sun, select for all others.
+
+	- queue.c patch for compile failure on alpha/OSF1 V3.2. 
+	  From Jean-Damien Durand <jdurand@mail.cern.ch>
+
+	- Use mtime instead of ctime to check whether a file has changed.
+	  Touch doesn't reliably update ctime on some systems.
+
+	- Send over environment using the same poll loop as when sending
+	  stdin/stdout.  A little cleaner & more efficient.
+
+
 1.5  Tue Mar 30 13:33:55 PST 1999
 
 	- Re-wrote the test scripts to be more reliable.

@@ -42,11 +42,13 @@ typedef struct {
     int  wrfd;
 } CopyBuf;
 
-#define CANREAD(buf)  (buf.sz < buf.maxsz && buf.eof == 0)
-#define CANWRITE(buf) (buf.sz > 0)
-#define COPYDONE(buf) (buf.eof != 0 && buf.sz == 0)
+#define CANREAD(buf)  ((buf).sz < (buf).maxsz && (buf).eof == 0)
+#define CANWRITE(buf) ((buf).sz > 0)
+#define COPYDONE(buf) ((buf).eof != 0 && (buf).sz == 0)
 
-void speedy_cb_alloc(CopyBuf *bp, int maxsz, int rdfd, int wrfd);
+void speedy_cb_alloc(
+    CopyBuf *bp, int maxsz, int rdfd, int wrfd, char *buf, int sz
+);
 void speedy_cb_free(CopyBuf *bp);
 void speedy_cb_read(CopyBuf *bp);
 void speedy_cb_write(CopyBuf *bp);

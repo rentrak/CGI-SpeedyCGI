@@ -61,8 +61,8 @@ int speedy_argc(char **p) {
 }
 
 int speedy_connect(unsigned short port) {
-    int s;
     struct sockaddr_in sa;
+    int s;
 
     /* Make socket. */
     if ((s = speedy_make_socket()) == -1) return -1;
