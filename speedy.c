@@ -222,7 +222,17 @@ static char *doit(
     if (retval) return retval;
 
     /* Connect up with client, if it's already there */
-    retval = speedy_getclient(&q, &s, &e);
+    while (1) {
+      retval = speedy_getclient(&q, &s, &e);
+      if (!retval) {
+	break;
+      }
+      if (OVAL_INT(opts[OPT_MAXBACKENDS]) == 0 ||
+	  q.queue_size < OVAL_INT(opts[OPT_MAXBACKENDS])) {
+	break;
+      }
+      usleep(50);
+    }
 
     /* If failed, create a new process. */
     if (retval) {

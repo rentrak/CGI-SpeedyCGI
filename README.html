@@ -1,7 +1,7 @@
 <HTML>
 <HEAD>
 <TITLE>CGI::SpeedyCGI - Speed up CGI scripts by running them persistently</TITLE>
-<LINK REV="made" HREF="mailto:sam@angel.daemoninc.com">
+<LINK REV="made" HREF="mailto:root@porky.devel.redhat.com">
 </HEAD>
 
 <BODY>
@@ -236,6 +236,25 @@ The following options are available:
 <PRE>        Use N bytes for the buffer that receives data
         from the CGI script.
 </PRE>
+<DT><STRONG><A NAME="item_MAXBACKENDS">MAXBACKENDS</A></STRONG><DD>
+<P>
+<PRE>    Command Line        : -MN
+    Environment         : SPEEDY_MAXBACKENDS
+    CGI::SpeedyCGI      : n/a
+    mod_speedycgi       : n/a
+    Default Value       : 0
+</PRE>
+<P>
+<PRE>    Description:
+</PRE>
+<P>
+<PRE>    If non-zero limits the number of backend processes that
+    speedy will spawn at any given time.  This is intended
+    to prevent thrashing in which a large perl library
+    will cause the system to slow down to the point where
+    there is an explosion of speedy processes when speedy
+    spawns backends to deal with incoming requests.
+</PRE>
 </DL>
 <P>
 <HR>
@@ -387,12 +406,6 @@ Should be able to have the perl prog wait for a new connection, etc.
 <UL>
 <LI>
 <P>
-Need an option to limit the maximum number of processes per cgi-bin.
-
-</UL>
-<UL>
-<LI>
-<P>
 Add option to check the amount of memory in use and exit when it gets too
 high.
 
@@ -460,9 +473,9 @@ SpeedyCGI can be retrieved from:
 <HR>
 <H1><A NAME="COPYRIGHT">COPYRIGHT</A></H1>
 <P>
-Copyright (c) 1999 Daemon Consulting Inc. All rights reserved. This program
-is free software; you can redistribute it and/or modify it under the same
-terms as Perl itself.
+Copyright (c) 1999-2000 Daemon Consulting Inc. All rights reserved. This
+program is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself.
 
 </BODY>
 

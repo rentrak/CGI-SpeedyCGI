@@ -23,6 +23,7 @@ t/scripts/stdio
 t/scripts/stdio2
 t/scripts/initial_eof
 t/scripts/stdin
+t/scripts/maxbackend
 t/basic.t
 t/shutdown.t
 t/initial_eof.t
@@ -33,6 +34,7 @@ t/stdio2.t
 t/eagain.t
 t/sh_bang.t
 t/stdin.t
+t/maxbackend.t
 lib/CGI/SpeedyCGI.pm
 benchmark/cmdline/timeit
 benchmark/cmdline/test.pl
@@ -50,3 +52,5 @@ libspeedy/speedy_libutil.c
 libspeedy/speedy_libutil.h
 libspeedy/speedy_queue.c
 libspeedy/speedy_queue.h
+contrib/mason.cgi
+contrib/Mason-SpeedyCGI-HOWTO

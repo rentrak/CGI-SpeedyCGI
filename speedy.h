@@ -100,6 +100,7 @@
 #define	OPT_TMPBASE	2
 #define OPT_MAXRUNS	3
 #define OPT_TIMEOUT	4
+#define OPT_MAXBACKENDS  5
 
 #ifdef SPEEDY_C_SOURCE
 static OptsRec opts[] = /* Our options */
@@ -118,6 +119,9 @@ static OptsRec opts[] = /* Our options */
     },
     {
 	"TIMEOUT",	't', OTYPE_INT,	(void*)3600
+    },
+    {
+	"MAXBACKENDS",	'M', OTYPE_INT,	(void*)0
     },
     {NULL, 0, 0, NULL}
 };

@@ -35,6 +35,7 @@
 
 #include "speedy.h"
 #include <patchlevel.h>
+#include <unistd.h>
 
 /*
  * Accomodate 5.004
@@ -94,6 +95,20 @@ char *speedy_spawn_perl(
 	close(lstn);
 	return NULL;
     }
+
+    /* There is almost certainly a possible race condition here.  The problem
+       is that the entry for the spawned perl process gets added here rather
+       than at the place that it is determined that a perl process is 
+       necessary.  This leaves a window in which the backend counter is
+       potentially inaccurate.  The problem with fixing this race condition
+       is that the queue indexes entries by process number and one does
+       not know the process number until this point.  One could fix the
+       race condition by adding an empty queue entry earlier.  */
+
+    pinfo->pid = getpid();
+    pinfo->used = 1;
+    if (speedy_q_add(q, pinfo)) doabort();
+
     speedy_exec_perl(q, cmd, perl_argv, opts, pinfo, lstn, envp);
     exit(1);
     return "notreached";
@@ -212,7 +227,6 @@ static void doit(
     g_queued = 0;
 
     for (numrun = 1;;numrun++) {
-
 	/* Set timeout */
         if ((g_alarm = OVAL_INT(opts[OPT_TIMEOUT])) > 0) {
 	    alarm(g_alarm);
@@ -239,7 +253,6 @@ static void doit(
 	    rsignal(SIGALRM, &doabort_sig);  
 	    g_alarm = 0;
 	}
-
 	/* Do one run through the script. */
 	onerun(g_q->secret_word, mypid, &pv, numrun);
 
@@ -276,9 +289,9 @@ static void doit(
 	    sv_setiv(pv.pv_opts_changed, 0);
 	}
 
-	/* Put ourself into the queue to wait for a connection. */
+	g_pinfo->pid = getpid();
+	g_pinfo->used = 0;
 	if (speedy_q_add(g_q, g_pinfo)) doabort();
-	g_queued = 1;
     }
 }
 
@@ -417,7 +430,7 @@ static Signal_t wakeup(int x) {
 /* Try to exit cleanly.  If we are flagged as being in the queue, then */
 /* we must still be listed there, otherwise someone is about to connect. */
 static void tryexit() {
-    if (!g_q || !g_pinfo || !g_queued || speedy_q_getme(g_q, g_pinfo) == NULL)
+    if (!g_q || !g_pinfo || !g_queued || speedy_q_deleteme(g_q, g_pinfo) == NULL)
     {
 	g_queued = 0;
 	all_done();

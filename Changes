@@ -1,5 +1,17 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+1.8.3  Sat Aug 01 16:52:20 GMT 2000
+        
+        - Added MAXBACKENDS feature to limit number of backend processes
+          spawned.  This required changing the format of the backend
+          queue.  Now each entry has a pid, port number, and used flag.
+          The queue now contains a list of all backend processes, with
+          the used flag present to determine whether or not the process
+          is in use.
+
+        - Added contrib directory with instructions on using SpeedyCGI
+          with HTML::Mason
+
 1.8.2  Sun Jun  6 04:01:53 GMT 1999
 
 	- Make I/O more compatible with PerlIO

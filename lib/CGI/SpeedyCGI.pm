@@ -1,6 +1,6 @@
 package CGI::SpeedyCGI;
 
-$VERSION = '1.8.2';
+$VERSION = '1.8.3';
 
 use strict;
 
@@ -218,6 +218,23 @@ The following options are available:
 	Use N bytes for the buffer that receives data
 	from the CGI script.
 
+=item MAXBACKENDS
+
+    Command Line        : -MN
+    Environment         : SPEEDY_MAXBACKENDS
+    CGI::SpeedyCGI      : n/a
+    mod_speedycgi       : n/a
+    Default Value       : 0
+
+    Description:
+
+    If non-zero limits the number of backend processes that
+    speedy will spawn at any given time.  This is intended
+    to prevent thrashing in which a large perl library
+    will cause the system to slow down to the point where
+    there is an explosion of speedy processes when speedy
+    spawns backends to deal with incoming requests.
+
 =back
 
 =head1 METHODS
@@ -375,14 +392,6 @@ Should be able to have the perl prog wait for a new connection, etc.
 
 =item *
 
-Need an option to limit the maximum number of processes per cgi-bin.
-
-=back
-
-=over 4
-
-=item *
-
 Add option to check the amount of memory in use and exit when it gets
 too high.
 
@@ -447,7 +456,7 @@ SpeedyCGI can be retrieved from:
 
 =head1 COPYRIGHT
 
-Copyright (c) 1999 Daemon Consulting Inc. All rights reserved. This
-program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
+Copyright (c) 1999-2000 Daemon Consulting Inc. All rights
+reserved. This program is free software; you can redistribute it
+and/or modify it under the same terms as Perl itself.
 

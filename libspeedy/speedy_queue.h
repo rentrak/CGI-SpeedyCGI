@@ -32,17 +32,22 @@
  *
  */
 
+#include <sys/types.h>
+
 /* Persistent info stored in header of queue file */
 typedef struct {
     char		*fname;		/* Queue file name */
     time_t		mtime;		/* Mtime of procs in the queue */
     int			secret_word;	/* Say the secret word */
     struct timeval	*start_time;
+  int                 queue_size;
 } SpeedyQueue;
 
 /* Persistent info stored for each process in queue file */
 typedef struct {
-    unsigned short	port;		/* Stored in network byte order */
+  pid_t pid;
+  unsigned short port;		/* Stored in network byte order */
+  unsigned short used;
 } PersistInfo;
 
 
@@ -56,3 +61,6 @@ char *speedy_q_get(SpeedyQueue *q, PersistInfo *pinfo);
 char *speedy_q_getme(SpeedyQueue *q, PersistInfo *pinfo);
 char *speedy_q_add(SpeedyQueue *q, PersistInfo *pinfo);
 void speedy_fillin_pinfo(PersistInfo *pinfo, int lstn);
+
+
+

@@ -90,6 +90,7 @@ char *speedy_q_init(
     q->fname		= fname;
     q->mtime		= stbuf->st_mtime;
     q->start_time	= start_time;
+    q->queue_size       = 0;
 
     return NULL;
 }
@@ -121,6 +122,7 @@ char *speedy_q_add(SpeedyQueue *q, PersistInfo *pinfo) {
     FileHandle fh;
     FileInfo *finfo;
     char *retval;
+    int i;
 
     /* Open the queue. */
     if ((retval = open_queue(q, &fh))) return retval;
@@ -128,32 +130,81 @@ char *speedy_q_add(SpeedyQueue *q, PersistInfo *pinfo) {
 
     /* If we are adding an out-of-date process, fail */
     if (q->mtime < finfo->mtime) {
-        retval = "file-changed";
+      close_queue(&fh);
+      return "file-changed";
     }
+
+    /* Check to see if the info matches existing process */
+    for (i = 0; i < finfo->len; i++) {
+      PersistInfo *xpinfo = finfo->pinfo + i;
+      if (pinfo->pid == xpinfo->pid) {
+	speedy_libfuncs.ls_memcpy(xpinfo, pinfo, 
+				  sizeof(PersistInfo));
+	close_queue(&fh);
+	return retval;
+      }
+    } 
+
     /* See if queue is full */
-    else if (finfo->len >= NUM_PINFO) {
-	retval = "queue-full";
+    if (finfo->len >= NUM_PINFO) {
+      close_queue(&fh);
+      return "queue-full";
     }
-    else {
-	/* Write to end of queue */
-	speedy_libfuncs.ls_memcpy(finfo->pinfo + finfo->len, pinfo, sizeof(PersistInfo));
-	finfo->len++;
-    }
+
+    /* Write to end of queue */
+    speedy_libfuncs.ls_memcpy(finfo->pinfo + finfo->len, 
+			      pinfo, sizeof(PersistInfo));
+    finfo->len++;
+    q->queue_size = finfo->len;
     close_queue(&fh);
     return retval;
 }
 
-/* Take the last entry out of the queue */
+/* Find unused entry */
 char *speedy_q_get(SpeedyQueue *q, PersistInfo *pinfo) {
-    return q_get(q, pinfo, 0);
+  FileHandle fh;
+  FileInfo *finfo;
+   char *retval = NULL;
+   int i;
+
+    /* Open the queue. */
+   if ((retval = open_queue(q, &fh))) return retval;
+   finfo = fh.finfo;
+
+   /* Remove dead entries */
+   for (i = 0; i < finfo->len; i++) {
+     PersistInfo *xpinfo = finfo->pinfo + i;
+     if (kill(xpinfo->pid, 0)) {
+       finfo->len--;
+       if (i < finfo->len) {
+	 speedy_libfuncs.ls_memmove(xpinfo, xpinfo+1,
+				    (finfo->len - i) * sizeof(PersistInfo));
+       }
+     }
+   }
+
+   if (finfo->len == 0) {
+     /* Nothing in the queue, fail */
+     retval = "queue empty";
+   } else {
+     for (i=0; i < finfo->len; i++) {
+       PersistInfo *xpinfo = finfo->pinfo + i;
+       if (xpinfo->used == 0) {
+	 xpinfo->used = 1;
+	 speedy_libfuncs.ls_memcpy(pinfo, xpinfo, 
+				   sizeof(PersistInfo));
+	 retval = NULL;
+	 break;
+       }
+     }
+   }
+   q->queue_size = finfo->len;
+   close_queue(&fh);
+   return retval;
 }
 
 /* Take myself out of the queue */
-char *speedy_q_getme(SpeedyQueue *q, PersistInfo *pinfo) {
-    return q_get(q, pinfo, 1);
-}
-
-static char *q_get(SpeedyQueue *q, PersistInfo *pinfo, int getme) {
+char *speedy_q_deleteme(SpeedyQueue *q, PersistInfo *pinfo) {
     FileHandle fh;
     FileInfo *finfo;
     char *retval = NULL;
@@ -163,38 +214,24 @@ static char *q_get(SpeedyQueue *q, PersistInfo *pinfo, int getme) {
     if ((retval = open_queue(q, &fh))) return retval;
     finfo = fh.finfo;
 
-    if (finfo->len == 0) {
-	/* Nothing in the queue, fail */
-	retval = "queue empty";
-    } else {
-	/* Getme means remove my entry */
-	if (getme) {
-	    retval = "not in queue";
-
-	    /* Search for my record. */
-	    for (i = 0; i < finfo->len; ++i) {
-		PersistInfo *xpinfo = finfo->pinfo + i;
-
-		/* Compare */
-		if (pinfo->port == xpinfo->port) {
-		    /* Found.  Move down other pinfos in the queue */
-		    finfo->len--;
-		    if (i < finfo->len) {
-			speedy_libfuncs.ls_memmove(xpinfo, xpinfo+1,
-			    (finfo->len - i) * sizeof(PersistInfo)
-			);
-		    }
-		    retval = NULL;
-		    break;
-		}
-	    }
-	} else {
-	    /* Get last pinfo in queue */
-	    finfo->len--;
-	    speedy_libfuncs.ls_memcpy(
-	        pinfo, finfo->pinfo + finfo->len, sizeof(PersistInfo)
-	    );
+    retval = "not in queue";
+    
+    /* Search for my record. */
+    for (i = 0; i < finfo->len; ++i) {
+      PersistInfo *xpinfo = finfo->pinfo + i;
+      
+      /* Compare */
+      if (pinfo->port == xpinfo->port) {
+	/* Found.  Move down other pinfos in the queue */
+	finfo->len--;
+	if (i < finfo->len) {
+	  speedy_libfuncs.ls_memmove(xpinfo, xpinfo+1,
+				     (finfo->len - i) * sizeof(PersistInfo)
+				     );
 	}
+	retval = NULL;
+	break;
+      }
     }
     close_queue(&fh);
     return retval;
@@ -306,7 +343,9 @@ void speedy_fillin_pinfo(PersistInfo *pinfo, int lstn) {
     getsockname(lstn, (struct sockaddr*)&sa, &len);
 
     /* Fill in persistent info */
+    pinfo->pid = 0;
     pinfo->port = sa.sin_port;
+    pinfo->used = 0;
 }
 
 static int make_secret(struct timeval *start_time) {
