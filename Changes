@@ -1,0 +1,13 @@
+Revision history for Perl extension CGI::SpeedyCGI.
+
+1.4  Mon Mar 29 03:54:39 PST 1999
+
+	- Converted C++ style comments to /**/.  Should help compilation
+
+	- Added CGI::SpeedyCGI::set_shutdown_handler to allow the perl
+	  program to set a callback for when perl is shut down.
+
+	- Added t/shutdown.t to test the new set_shutdown_handler feature.
+
+	- queue.c wouldn't compile as-is on Solaris Devpro-4.2.  Changed
+	  the void*'s to char*'s so the compiler could do pointer arithmetic.

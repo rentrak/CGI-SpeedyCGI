@@ -1,0 +1,160 @@
+
+SpeedyCGI version 1.4, 3/29/99
+
+Overview
+========
+
+SpeedyCGI is a way to run CGI perl scripts persistently, which usually
+makes them run much more quickly.  Converting scripts to use SpeedyCGI is
+in most cases as simple has changing the interpreter line at the top of
+the script from
+
+    #!/usr/local/bin/perl
+
+to
+
+    #!/usr/local/bin/speedy
+
+After the script is initially run, instead of exiting, SpeedyCGI keeps the
+perl interpreter running in memory.  During subsequent runs, this interpreter
+is used to handle new requests, instead of starting a new perl interpreter
+for each execution.
+
+SpeedyCGI conforms to the CGI specification, and does not work inside the
+web server.  A very fast cgi-bin (written in C) is executed for each request.
+This fast cgi-bin then contacts the persistent Perl process, which is usually
+already in memory, to do the work and return the results.
+
+Since all of these processes run outside the web server, they can't cause
+problems for the web server itself.  Also, each perl program runs as its own
+Unix process, so one program can't interfere with another.  Command line
+options can also be used to deal with programs that have memory leaks or
+other problems that might keep them from otherwise running persistently.
+
+
+Installation
+============
+
+SpeedyCGI has been tried with perl versions 5.004_04 and 5.005_02,
+and under Solaris 2.6, Redhat Linux 5.1, and FreeBSD 3.1.  There
+may be problems wither other OSes or earlier versions of Perl.
+
+To install, do the following:
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+This will install a "speedy" binary in the same directory where "perl"
+was installed.
+
+
+Using SpeedyCGI
+===============
+
+To convert a script to use SpeedyCGI, change the #! interpreter line to
+call "speedy" instead of "perl".  The "speedy" binary, for the most part
+accepts the same command line options as perl.
+
+The speedy binary also accepts its own set of options, which must be put
+after a "--" at the end of the perl options.  The speedy binary accepts
+the following options:
+
+	-tN		If no new requests have been received after N
+			seconds, exit the persistent perl interpreter.
+			The default is 3600 (one hour).  Use 0 to indicate
+			no timeout.
+
+	-rN		Once the perl interpreter has run N times, exit.
+			The default is 0 (no max).
+
+	-Tprefix	Use the given prefix for creating temporary files.
+			This must be a filename prefix, not a directory name.
+			The default is "/tmp/speedy".
+	
+	-bN		Use N bytes for the buffer that sends data to
+			the CGI script.  Default is 1024.
+
+	-BN		Use N bytes for the buffer that receives data from
+			the CGI script.  Default is 8192.
+
+For example:
+	
+	#!/usr/local/bin/speedy -w -- -t300
+
+Will call SpeedyCGI with the perl option "-w" and will tell speedy
+to exit if no new requests have been received after 300 seconds.
+
+
+Bugs
+====
+
+If the perl program chdir's to another directory, we should chdir back before
+calling the perl program again.
+
+If the perl program sets any handlers for SIGINT, etc they should be reset to
+the start_perl cleanup routines after the perl program returns.
+
+On Solaris, sometimes the CGI front-end gets stuck in the poll() call
+in speedy.c.  Re-compiling with -g instead of -O seems to keep this
+from happening.
+
+
+To Do
+=====
+
+Write mod_speedycgi as an optional replacement for the CGI front-end.
+This would avoid a fork/exec for each request.
+
+Need benchmarks of speedy vs mod_perl
+
+Pass file descriptors 0/1 to the Perl prog using I_SENDFD on systems
+that support it (like Solaris).  Avoids the overhead of copying
+through the CGI front-end.
+
+Need to figure out whether speedyhandler still works/is useful, and if so
+document how to use it.
+
+In start_perl, use a poll() timeout instead of an alarm to implement the
+timeout while waiting for an accept.  It's cleaner than a signal.
+
+Need to allow more program control from perl via the CGI::SpeedyCGI module.
+Should be able to have the perl prog wait for a new connection, set
+options, etc.
+
+Figure out a way to allow stderr output from the perl program.  Maybe
+out-of-band data on the same socket?
+
+
+Mailing List
+============
+
+Dave Parker (dparker@gb.frontiernet.net) has set up a mailing list,
+speedycgi@newlug.org.  Subscribe by sending a message to
+speedycgi-request@newlug.org with "subscribe" in the body.
+
+Archive is at http://newlug.org/mailArchive/speedycgi
+
+
+Downloading
+===========
+
+SpeedyCGI can be retrieved from:
+
+    http://daemoninc.com/speedycgi
+    http://www.cpan.org/modules/by-authors/id/H/HO/HORROCKS/
+
+
+Author
+======
+
+Sam Horrocks
+Daemon Consulting Inc.
+http://daemoninc.com
+sam@daemoninc.com
+
+
+Copyright (c) 1999 Daemon Consulting Inc. All rights reserved. This
+program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
