@@ -1,64 +1,67 @@
 
 use strict;
 use ExtUtils::MakeMaker;
-use ExtUtils::Embed;
-
-print "Makefile.PL: creating xsinit.c\n";
-xsinit('xsinit.c');
+use lib 'src';
+use SpeedyMake qw(%write_makefile_common);
 
 WriteMakefile(
     NAME		=> 'CGI::SpeedyCGI',
-    OBJECT		=> 'copybuf.o util.o start_perl.o opts.o
-			    speedy.o xsinit.o speedy_poll.o',
-    VERSION_FROM	=> 'lib/CGI/SpeedyCGI.pm',
-    MAP_TARGET		=> 'speedy',
-    INC			=> '-I./libspeedy',
-    DEFINE		=> '-DSPEEDY_BIN=\"$(INSTALLBIN)/speedy\"',
+    VERSION_FROM	=> 'src/SpeedyCGI.src',
+    EXE_FILES		=> [qw(speedy/speedy speedy_backend/speedy_backend)],
+    CONFIGURE		=> \&get_dir,
+    PM			=> {'src/SpeedyCGI.pm'=>'$(INST_LIBDIR)/SpeedyCGI.pm'},
+    MAN1PODS		=> {},
+    MAN3PODS		=> {},
+    dist		=> {DIST_DEFAULT => 'mydist'},
+    realclean		=> {FILES => 'README README.html'},
+    %write_makefile_common
 );
+
+# Find out which directories to make.  Exclude mod_speedycgi if no apxs cmd
+sub get_dir {
+    my @list = qw(src speedy_backend speedy);
+
+    if (&do_apache) {
+	unshift(@list, 'mod_speedycgi');
+    }
+    return {DIR=>\@list};
+}
+
+sub do_apache {
+    use vars qw($do_apache);
+    if (!defined($do_apache)) {
+	system('apxs -q CC >/dev/null 2>&1');
+	if ($?) {
+	    print "Skipping mod_speedycgi because the 'apxs' command ";
+	    print "wasn't found in your path.\n"; 
+	    $do_apache = 0;
+	} else {
+	    $do_apache = 1;
+	}
+    }
+    return $do_apache;
+}
 
 package MY;
 
 use ExtUtils::Embed;
 
 sub postamble {
-    '
-all :: speedy speedyhandler README.html README apache/README.html apache/README
+    my $extra;
+    if (&main::do_apache) {
+	$extra = "\ninstall ::\n\tcd mod_speedycgi; make install\n\n";
+    }
+'
+src/SpeedyCGI.pm: src/SpeedyCGI.src src/optdefs
+	cd src; $(MAKE)
 
-README: lib/CGI/SpeedyCGI.pm
-	(cd lib/CGI; pod2text SpeedyCGI.pm >../../README)
+mydist: README README.html tardist
 
-README.html: lib/CGI/SpeedyCGI.pm
-	(cd lib/CGI; pod2html SpeedyCGI.pm >../../README.html; rm -f pod2html*)
+README: src/SpeedyCGI.pm
+	(cd src; perl -e "use Pod::Text; pod2text(\"-80\")" < SpeedyCGI.pm >../README)
 
-apache/README: apache/mod_speedycgi.pod
-	(cd apache; pod2text mod_speedycgi.pod >README)
-
-apache/README.html: apache/mod_speedycgi.pod
-	(cd apache; pod2html mod_speedycgi.pod >README.html; rm -f pod2html*)
-
-speedyhandler: speedy
-	rm -f speedyhandler; ln speedy speedyhandler
-
-clean ::
-	rm -f speedyhandler xsinit.c
-
-install :: speedy speedyhandler
-	rm -f $(INSTALLBIN)/speedyhandler $(INSTALLBIN)/speedy
-	cp speedy $(INSTALLBIN)/speedy
-	ln $(INSTALLBIN)/speedy $(INSTALLBIN)/speedyhandler
-    ';
-}
-
-sub makeaperl {
-    my $ldopts = ldopts('-std');
-    my $ccopts = ccopts();
-    "
-SPEEDYLIB=./libspeedy/blib/arch/auto/libspeedy/libspeedy.a
-
-\$(SPEEDYLIB): libspeedy/*.c libspeedy/*.h
-	cd libspeedy; perl Makefile.PL; make
-
-speedy: \$(O_FILES) \$(SPEEDYLIB)
-	rm -f speedy; \$(CC) $ccopts -o speedy \$(O_FILES) \$(SPEEDYLIB) $ldopts
-    ";
+README.html: src/SpeedyCGI.pm
+	(cd src; pod2html SpeedyCGI.pm >../README.html; rm -f pod2html*)
+	
+' . $extra;
 }

@@ -1,0 +1,11 @@
+
+timeit
+
+    Basic timing test.  Speedy should be around 10x or better than perl
+    on this test.  If not, there may be a problem.
+
+
+check_syms
+
+    Used by the makefile to check .o files for symbols that shouldn't
+    be exported.  Almost all exported symbols should start with "speedy"

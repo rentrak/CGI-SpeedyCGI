@@ -1,0 +1,8 @@
+use POSIX qw(open close);
+
+for (my $i = 3; $i <= 31; ++$i) {
+    close($i);
+}
+my @fds = map {open('/dev/null', O_RDONLY, 0)} (3..31);
+print $$, "\n";
+chdir('/');

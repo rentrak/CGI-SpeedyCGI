@@ -1,7 +1,7 @@
 <HTML>
 <HEAD>
-<TITLE>CGI::SpeedyCGI - Speed up CGI scripts by running them persistently</TITLE>
-<LINK REV="made" HREF="mailto:root@porky.devel.redhat.com">
+<TITLE>CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently</TITLE>
+<LINK REV="made" HREF="mailto:sam@angel.daemoninc.com">
 </HEAD>
 
 <BODY>
@@ -16,17 +16,28 @@
 	<LI><A HREF="#OPTIONS">OPTIONS</A>
 	<UL>
 
-		<LI><A HREF="#How_to_Set">How to Set</A>
+		<LI><A HREF="#Setting_Option_Values">Setting Option Values</A>
+		<LI><A HREF="#Context">Context</A>
 		<LI><A HREF="#Options_Available">Options Available</A>
 	</UL>
 
 	<LI><A HREF="#METHODS">METHODS</A>
 	<LI><A HREF="#INSTALLATION">INSTALLATION</A>
+	<UL>
+
+		<LI><A HREF="#Standard_Install">Standard Install</A>
+		<LI><A HREF="#Install_in_a_Different_Directory">Install in a Different Directory</A>
+		<LI><A HREF="#Apache_Installation">Apache Installation</A>
+		<LI><A HREF="#Apache_Configuration">Apache Configuration</A>
+	</UL>
+
 	<LI><A HREF="#BUGS">BUGS</A>
+	<LI><A HREF="#FREQUENTLY_ASKED_QUESTIONS">FREQUENTLY ASKED QUESTIONS</A>
 	<LI><A HREF="#TODO">TODO</A>
 	<LI><A HREF="#MAILING_LIST">MAILING LIST</A>
 	<LI><A HREF="#DOWNLOADING">DOWNLOADING</A>
 	<LI><A HREF="#AUTHOR">AUTHOR</A>
+	<LI><A HREF="#SEE_ALSO">SEE ALSO</A>
 	<LI><A HREF="#COPYRIGHT">COPYRIGHT</A>
 </UL>
 <!-- INDEX END -->
@@ -35,7 +46,7 @@
 <P>
 <H1><A NAME="NAME">NAME</A></H1>
 <P>
-CGI::SpeedyCGI - Speed up CGI scripts by running them persistently
+CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 
 <P>
 <HR>
@@ -45,6 +56,7 @@ CGI::SpeedyCGI - Speed up CGI scripts by running them persistently
 </PRE>
 <P>
 <PRE> ### Your CGI Script Here
+ print &quot;Content-type: text/html\n\nHello World!\n&quot;;
 </PRE>
 <P>
 <PRE> ##
@@ -75,7 +87,7 @@ CGI::SpeedyCGI - Speed up CGI scripts by running them persistently
 <P>
 SpeedyCGI is a way to run CGI perl scripts persistently, which usually
 makes them run much more quickly. Converting scripts to use SpeedyCGI is in
-most cases as simple has changing the interpreter line at the top of the
+many cases as simple has changing the interpreter line at the top of the
 script from
 
 <P>
@@ -95,7 +107,7 @@ interpreter for each execution.
 
 <P>
 SpeedyCGI conforms to the CGI specification, and does not work inside the
-web server. A very fast cgi-bin (written in C) is executed for each
+web server. A very fast cgi-bin, written in C, is executed for each
 request. This fast cgi-bin then contacts the persistent Perl process, which
 is usually already in memory, to do the work and return the results.
 
@@ -111,7 +123,7 @@ other problems that might keep them from otherwise running persistently.
 <H1><A NAME="OPTIONS">OPTIONS</A></H1>
 <P>
 <HR>
-<H2><A NAME="How_to_Set">How to Set</A></H2>
+<H2><A NAME="Setting_Option_Values">Setting Option Values</A></H2>
 <P>
 SpeedyCGI options can be set in several ways:
 
@@ -122,138 +134,182 @@ The speedy command line is the same as for regular perl, with the exception
 that SpeedyCGI specific options can be passed in after a ``--''.
 
 <P>
-For example:
+For example the line:
 
 <P>
 <PRE>        #!/usr/local/bin/speedy -w -- -t300
 </PRE>
 <P>
-at the top of your script will call SpeedyCGI with the perl option ``<CODE>-w</CODE>'' and will pass the ``<CODE>-t</CODE>'' option to speedy, telling it to exit if no new requests have been
-received after 300 seconds.
+at the top of your script will call SpeedyCGI with the perl option ``<CODE>-w</CODE>'' and will pass the ``<CODE>-t</CODE>'' option to speedy, setting the Timeout option to 300 seconds.
 
 </DL>
 <DL>
 <DT><STRONG><A NAME="item_Environment">Environment</A></STRONG><DD>
 <P>
 Environment variables can be used to pass in options. This can only be done
-before the initial execution (ie not from within the script itself).
+before the initial execution, not from within the script itself. The name
+of the environment variable is always SPEEDY_ followed by the option name
+in upper-case. For example to set the speedy Timeout option, use the
+environment variable named SPEEDY_TIMEOUT.
 
 </DL>
 <DL>
 <DT><STRONG><A NAME="item_CGI">CGI::SpeedyCGI</A></STRONG><DD>
 <P>
-The CGI::SpeedyCGI module provides a method, setopt, to set options from
+The CGI::SpeedyCGI module provides the setopt method to set options from
 within the perl script at runtime. There is also a getopt method to
-retrieve the current options.
+retrieve the current options. See <A HREF="#METHODS">METHODS</A> below.
 
 </DL>
 <DL>
 <DT><STRONG><A NAME="item_mod_speedycgi">mod_speedycgi</A></STRONG><DD>
 <P>
 If you are using the optional Apache module, SpeedyCGI options can be set
-in the httpd.conf file.
+in the httpd.conf file. The name of the apache directive will always be
+Speedy followed by the option name. For example to set the speedy Timeout
+option, use the apache directive SpeedyTimeout.
+
+</DL>
+<P>
+<HR>
+<H2><A NAME="Context">Context</A></H2>
+<P>
+Not all options below are available in all contexts. The context for which
+each option is valid is listed on the ``Context'' line in the section
+below. There are three contexts:
+
+<DL>
+<DT><STRONG><A NAME="item_speedy">speedy</A></STRONG><DD>
+<P>
+The command-line ``speedy'' program, used normally with #! at the top of
+your script or from a shell prompt.
+
+</DL>
+<DL>
+<DT><STRONG>mod_speedycgi</STRONG><DD>
+<P>
+The optional Apache mod_speedycgi module.
+
+</DL>
+<DL>
+<DT><STRONG><A NAME="item_module">module</A></STRONG><DD>
+<P>
+During perl execution via the CGI::SpeedyCGI module's getopt/setopt
+methods.
 
 </DL>
 <P>
 <HR>
 <H2><A NAME="Options_Available">Options Available</A></H2>
-<P>
-The following options are available:
-
 <DL>
-<DT><STRONG><A NAME="item_TIMEOUT">TIMEOUT</A></STRONG><DD>
+<DT><STRONG><A NAME="item_BackendProg">BackendProg</A></STRONG><DD>
 <P>
-<PRE>    Command Line        : -tN
-    Environment         : SPEEDY_TIMEOUT
-    CGI::SpeedyCGI      : TIMEOUT
-    mod_speedycgi       : SpeedyTimeout
-    Default Value       : 3600 (one hour)
+<PRE>    Command Line    : -pstr
+    Default Value   : /usr/bin/speedy_backend
+    Context         : mod_speedycgi, speedy
 </PRE>
 <P>
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        If no new requests have been received after N
-        seconds, exit the persistent perl interpreter.
-        Use 0 to indicate no timeout.
+<PRE>        Path to the speedy backend program.
 </PRE>
-<DT><STRONG><A NAME="item_MAXRUNS">MAXRUNS</A></STRONG><DD>
+<DT><STRONG><A NAME="item_BufsizGet">BufsizGet</A></STRONG><DD>
 <P>
-<PRE>    Command Line        : -rN
-    Environment         : SPEEDY_MAXRUNS
-    CGI::SpeedyCGI      : MAXRUNS
-    mod_speedycgi       : SpeedyMaxruns
-    Default Value       : 0 (ie no max)
+<PRE>    Command Line    : -BN
+    Default Value   : 8192
+    Context         : speedy
 </PRE>
 <P>
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Once the perl interpreter has run N times, exit.
+<PRE>        Use this many bytes for the buffer that
+        receives data from the CGI script.
 </PRE>
-<DT><STRONG><A NAME="item_TMPBASE">TMPBASE</A></STRONG><DD>
+<DT><STRONG><A NAME="item_BufsizPost">BufsizPost</A></STRONG><DD>
 <P>
-<PRE>    Command Line        : -Tstr
-    Environment         : SPEEDY_TMPBASE
-    CGI::SpeedyCGI      : n/a
-    mod_speedycgi       : SpeedyTmpbase
-    Default Value       : /tmp/speedy
-</PRE>
-<P>
-<PRE>    Description:
-</PRE>
-<P>
-<PRE>        Use the given prefix for creating temporary files.
-        This must be a filename prefix, not a directory name.
-</PRE>
-<DT><STRONG><A NAME="item_BUFSIZ_POST">BUFSIZ_POST</A></STRONG><DD>
-<P>
-<PRE>    Command Line        : -bN
-    Environment         : SPEEDY_BUFSIZ_POST
-    CGI::SpeedyCGI      : n/a
-    mod_speedycgi       : n/a
-    Default Value       : 1024
+<PRE>    Command Line    : -bN
+    Default Value   : 1024
+    Context         : speedy
 </PRE>
 <P>
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use N bytes for the buffer that sends data
-        to the CGI script.
+<PRE>        Use this many bytes for the buffer that sends
+        data to the CGI script.
 </PRE>
-<DT><STRONG><A NAME="item_BUFSIZ_GET">BUFSIZ_GET</A></STRONG><DD>
+<DT><STRONG><A NAME="item_MaxBackends">MaxBackends</A></STRONG><DD>
 <P>
-<PRE>    Command Line        : -BN
-    Environment         : SPEEDY_BUFSIZ_GET
-    CGI::SpeedyCGI      : n/a
-    mod_speedycgi       : n/a
-    Default Value       : 8192
+<PRE>    Command Line    : -MN
+    Default Value   : 0 (no max)
+    Context         : mod_speedycgi, speedy
 </PRE>
 <P>
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use N bytes for the buffer that receives data
-        from the CGI script.
+<PRE>        If non-zero, limits the number of speedy
+        backends running for this cgi script to this
+        value.
 </PRE>
-<DT><STRONG><A NAME="item_MAXBACKENDS">MAXBACKENDS</A></STRONG><DD>
+<DT><STRONG><A NAME="item_MaxRuns">MaxRuns</A></STRONG><DD>
 <P>
-<PRE>    Command Line        : -MN
-    Environment         : SPEEDY_MAXBACKENDS
-    CGI::SpeedyCGI      : n/a
-    mod_speedycgi       : n/a
-    Default Value       : 0
+<PRE>    Command Line    : -rN
+    Default Value   : 0 (no max)
+    Context         : mod_speedycgi, module, speedy
 </PRE>
 <P>
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>    If non-zero limits the number of backend processes that
-    speedy will spawn at any given time.  This is intended
-    to prevent thrashing in which a large perl library
-    will cause the system to slow down to the point where
-    there is an explosion of speedy processes when speedy
-    spawns backends to deal with incoming requests.
+<PRE>        Once the perl interpreter has run this many
+        times, re-exec the backend process.  Zero
+        indicates no maximum.  This option is useful
+        for processes that tend to consume resources
+        over time.
+</PRE>
+<DT><STRONG><A NAME="item_PerlArgs">PerlArgs</A></STRONG><DD>
+<P>
+<PRE>    Command Line    : N/A
+    Default Value   : 
+    Context         : mod_speedycgi
+</PRE>
+<P>
+<PRE>    Description:
+</PRE>
+<P>
+<PRE>        Command-line options to pass to the perl
+        interpreter.
+</PRE>
+<DT><STRONG><A NAME="item_Timeout">Timeout</A></STRONG><DD>
+<P>
+<PRE>    Command Line    : -tN
+    Default Value   : 3600 (one hour)
+    Context         : mod_speedycgi, module, speedy
+</PRE>
+<P>
+<PRE>    Description:
+</PRE>
+<P>
+<PRE>        If no new requests have been received after
+        this many seconds, exit the persistent perl
+        interpreter.  Zero indicates no timeout.
+</PRE>
+<DT><STRONG><A NAME="item_TmpBase">TmpBase</A></STRONG><DD>
+<P>
+<PRE>    Command Line    : -Tstr
+    Default Value   : /tmp/speedy
+    Context         : mod_speedycgi, speedy
+</PRE>
+<P>
+<PRE>    Description:
+</PRE>
+<P>
+<PRE>        Use the given prefix for creating temporary
+        files.  This must be a filename prefix, not a
+        directory name.
 </PRE>
 </DL>
 <P>
@@ -290,8 +346,7 @@ method allows the script to tell which environment it is in.
 </PRE>
 <DT><STRONG><A NAME="item_setopt">setopt($optname, $value)</A></STRONG><DD>
 <P>
-Set one of the SpeedyCGI options given in the OPTIONS section. Returns the
-previous value that the option had. <CODE>$optname</CODE> is
+Set one of the SpeedyCGI options given in <A HREF="#Options_Available">Options Available</A>. Returns the option's previous value. <CODE>$optname</CODE> is
 case-insensitive.
 
 <P>
@@ -310,10 +365,13 @@ Return the current value of one of the SpeedyCGI options.
 <HR>
 <H1><A NAME="INSTALLATION">INSTALLATION</A></H1>
 <P>
-SpeedyCGI has been tried with perl versions 5.004_04 and 5.005_02, and
-under Solaris 2.6, Redhat Linux 5.1, and FreeBSD 3.1. There may be problems
-wither other OSes or earlier versions of Perl.
+SpeedyCGI has been tried with perl version 5.004_04 under Solaris 2.6 and
+version 5.005_03, under Redhat Linux 6.1. There may be problems with other
+OSes or earlier versions of Perl.
 
+<P>
+<HR>
+<H2><A NAME="Standard_Install">Standard Install</A></H2>
 <P>
 To install, do the following:
 
@@ -324,53 +382,204 @@ To install, do the following:
     make install
 </PRE>
 <P>
-This will install a ``speedy'' binary in the same directory where ``perl''
-was installed. If you want to install the optional Apache module, see the
-README in the apache directory.
+This will install the speedy and speedy_backend binaries in the same
+directory where perl was installed, and the SpeedyCGI.pm module in the
+standard perl lib directory. It will also attempt to install the
+mod_speedycgi module if you have ``apxs'' in your path.
 
 <P>
 <HR>
-<H1><A NAME="BUGS">BUGS</A></H1>
+<H2><A NAME="Install_in_a_Different_Directory">Install in a Different Directory</A></H2>
+<P>
+To install in a different directory, change the first line in the standard
+install to:
+
+<P>
+<PRE>    perl Makefile.PL PREFIX=/somewhere
+</PRE>
+<P>
+This will install the binaries in /somewhere/bin and the SpeedyCGI.pm
+module under /somewhere/lib.
+
+<P>
+<HR>
+<H2><A NAME="Apache_Installation">Apache Installation</A></H2>
+<P>
+To use the optional apache mod_speedycgi module you must have the ``apxs''
+command in your path. Redhat includes this command with the
+``apache-devel'' RPM. Also, the apxs command may be broken for installing
+the module.
+
+<P>
+If the apache installation fails:
+
 <UL>
 <LI>
 <P>
-Under heavy load we may run out of sockets (especially on FreeBSD), since
-they hang around in a TIME_WAIT state after closing. Might do better with
-fifos (named pipes).
-
-<P>
-Workaround on FreeBSD is to increase the ``maxusers'' value in the kernel
-config file and compile/install a new kernel. The default value of 32 is
-too low -- use 256 or more.
+Copy the mod_speedycgi.so from the mod_speedycgi directory to wherever your
+apache modules are stored (try /usr/lib/apache)
 
 </UL>
+<UL>
+<LI>
+<P>
+Edit your httpd.conf (try /etc/httpd/conf/httpd.conf) and add the following
+lines. The path at the end of the LoadModule directive may be different in
+your installation -- look at other LoadModules to see.
+
+<P>
+<PRE>    LoadModule speedycgi_module modules/mod_speedycgi.so
+    AddModule mod_speedycgi.c
+</PRE>
+</UL>
+<P>
+<HR>
+<H2><A NAME="Apache_Configuration">Apache Configuration</A></H2>
+<P>
+Once mod_speedycgi is installed, it has to be configured to be used for
+your perl scripts. There are two methods.
+
+<P>
+Warning! The instructions below may compromise the security of your web
+site. The security risks associated with SpeedyCGI are similar to those of
+regular CGI. If you don't understand the security implications of the
+changes below then don't make them.
+
+<OL>
+<LI><STRONG><A NAME="item_Path_Configuration">Path Configuration</A></STRONG>
+<P>
+This is similar to the way /cgi-bin works - everything under this path is
+handled by SpeedyCGI. Add the following lines near the top of your
+httpd.conf - this will cause all scripts in your cgi-bin directory to be
+handled by SpeedyCGI when they are accessed as /speedy/script-name.
+
+<P>
+<PRE>    Alias /speedy/ /home/httpd/cgi-bin/
+    &lt;Location /speedy&gt;
+        SetHandler speedycgi-script
+        Options ExecCGI
+        allow from all
+    &lt;/Location&gt;
+</PRE>
+<LI><STRONG><A NAME="item_File_Extension_Configuration">File Extension Configuration</A></STRONG>
+<P>
+This will make SpeedyCGI handle all files with a certain extension, similar
+to the way .cgi files work. Add the following lines near the top of your
+httpd.conf file - this will set up the file extension ``.speedy'' to be
+handled by SpeedyCGI.
+
+<P>
+<PRE>    AddHandler speedycgi-script .speedy
+    &lt;Location /&gt;
+        Options ExecCGI
+    &lt;/Location&gt;
+</PRE>
+</OL>
+<P>
+<HR>
+<H1><A NAME="BUGS">BUGS</A></H1>
+<P>
+Please report any bugs to <A
+HREF="mailto:speedycgi@newlug.org.">speedycgi@newlug.org.</A> Below is a
+list of known bugs:
+
 <UL>
 <LI>
 <P>
 On Solaris w/Netscape Enterprise 3.x, occasionally the CGI front-end gets
-stuck in the <CODE>poll()</CODE> call in speedy.c.
+stuck in the <CODE>poll()</CODE> call in speedy.c. The cause is unknown.
 
 </UL>
-<UL>
-<LI>
 <P>
-``make test'' reportedly fails under sun4 sunos 4.1.4
-
-</UL>
-<UL>
-<LI>
+<HR>
+<H1><A NAME="FREQUENTLY_ASKED_QUESTIONS">FREQUENTLY ASKED QUESTIONS</A></H1>
+<DL>
+<DT><STRONG><A NAME="item_How">How does the speedy front end connect to the back end process?</A></STRONG><DD>
 <P>
-Release 1.6 reportedly runs very slow on Dec Alpha running Unix 4.0b and
-fails the intial_eof test. 1.5 runs OK.
+Via a Unix socket in /tmp. A queue is kept in /tmp that holds an entry for
+each process. In that queue are the pids of the perl processes waiting for
+connections. The CGI-front end pulls a process out of this queue, connects
+to its socket, sends over the environment and argv, and then uses this
+socket for stdin/stdout to the perl process.
 
-</UL>
+</DL>
+<DL>
+<DT><STRONG><A NAME="item_If">If another request comes in while a CGI is running, does the client
+have to wait or is another process started?  Is there a way to set a limit
+on how many processes get started?</A></STRONG><DD>
+<P>
+If another request comes while all the perl processes are busy, then
+another perl process is started. Just like in CGI there is normally no
+limit on how many processes get started. But, the processes are only
+started when the load is so high that they're necessary. If the load goes
+down, the processes will die off due to inactivity, unless you disable the
+timeout.
+
+<P>
+Starting in version 1.8.3 an option was added to limit the number of perl
+backends running. See <STRONG>MaxBackends</STRONG> in <A HREF="#Options_Available">Options Available</A>
+above.
+
+</DL>
+<DL>
+<DT><STRONG>How much of perl's state is kept when speedy starts another request?
+Do globals keep their values?  Are destructors run after the request?</STRONG><DD>
+<P>
+Globals keep their values. Nothing is destroyed after the request.
+STDIN/STDOUT/STDERR are closed -- other files are not.  <CODE>%ENV</CODE>, <CODE>@ARGV</CODE>, and
+<CODE>%SIG</CODE> are the only globals changed between requests.
+
+</DL>
+<DL>
+<DT><STRONG>How can I make sure speedy restarts when I edit a perl library used
+by the CGI?</STRONG><DD>
+<P>
+Do a touch on the main cgi file that is executed. The mtime on the main
+file is checked each time the front-end runs.
+
+</DL>
+<DL>
+<DT><STRONG><A NAME="item_Do">Do I need to be root to install and/or run SpeedyCGI?</A></STRONG><DD>
+<P>
+No, root is not required.
+
+</DL>
+<DL>
+<DT><STRONG>How can I determine if my perl app needs to be changed to work with
+speedy?  Or is there no modification necessary?</STRONG><DD>
+<P>
+You may have to make modifications.
+
+<P>
+Globals retain their values between runs, which can be good for keeping
+persistent database handles for example, or bad if your code assumes
+they're undefined.
+
+<P>
+Also, if you create global variables with ``my'', you shouldn't try to
+reference those variables from within a subroutine - you should pass them
+into the subroutine instead.
+
+<P>
+Here's a good explanation of the problem - it's for mod_perl, but the same
+thing applies to speedycgi:
+
+<P>
+<PRE>    <A HREF="http://perl.apache.org/faq/mod_perl_cgi.html#Variables_retain_their_value_fro">http://perl.apache.org/faq/mod_perl_cgi.html#Variables_retain_their_value_fro</A>
+</PRE>
+<P>
+If all else fails you can disable persistence by setting MaxRuns to 1. The
+only benefit of this over normal perl is that speedy will pre-compile your
+script between requests.
+
+</DL>
 <P>
 <HR>
 <H1><A NAME="TODO">TODO</A></H1>
 <UL>
 <LI>
 <P>
-Need benchmarks of speedy vs mod_perl
+Need benchmarks and feature comparison of speedy, mod_perl, fastcgi.
 
 </UL>
 <UL>
@@ -379,21 +588,6 @@ Need benchmarks of speedy vs mod_perl
 Pass file descriptors 0/1 to the Perl prog using I_SENDFD on systems that
 support it (like Solaris). Avoids the overhead of copying through the CGI
 front-end.
-
-</UL>
-<UL>
-<LI>
-<P>
-Need to figure out whether speedyhandler still works/is useful, and if so
-document how to use it.
-
-</UL>
-<UL>
-<LI>
-<P>
-In start_perl, use a <CODE>poll()</CODE> timeout instead of an alarm to
-implement the timeout while waiting for an accept. It's cleaner than a
-signal.
 
 </UL>
 <UL>
@@ -413,27 +607,37 @@ high.
 <UL>
 <LI>
 <P>
-Need tests for:
+Port to Windows NT
 
-<UL>
-<LI>
-<P>
-getopt, setopt and i_am_speedy methods.
-
-<LI>
-<P>
-multiple persistent perl processes
-
-<LI>
-<P>
-mod_speedycgi
-
-</UL>
 </UL>
 <UL>
 <LI>
 <P>
-Add option to have a single perl process handle multiple cgi-bin's.
+See if all of the backend functions can be moved into the CGI::SpeedyCGI
+module, and then eliminate the separate speedy_backend binary and use the
+normal perl binary instead.
+
+</UL>
+<UL>
+<LI>
+<P>
+Enable the group option so a single interpreter can run multiple scripts.
+This feature is in the temp-file structure, but not yet implemented in
+code.
+
+</UL>
+<UL>
+<LI>
+<P>
+Add frontend disk caching so that slow clients don't tie up backends. This
+would be incompatible with I_SENDFD.
+
+</UL>
+<UL>
+<LI>
+<P>
+When invalidating a group, send an alarm signal to all frontends waiting in
+the queue.
 
 </UL>
 <P>
@@ -471,11 +675,32 @@ SpeedyCGI can be retrieved from:
 </PRE>
 <P>
 <HR>
+<H1><A NAME="SEE_ALSO">SEE ALSO</A></H1>
+<P>
+<CODE>perl(1),</CODE> <CODE>httpd(8),</CODE> <CODE>apxs(8).</CODE>
+
+<P>
+<HR>
 <H1><A NAME="COPYRIGHT">COPYRIGHT</A></H1>
 <P>
-Copyright (c) 1999-2000 Daemon Consulting Inc. All rights reserved. This
-program is free software; you can redistribute it and/or modify it under
-the same terms as Perl itself.
+Copyright (C) 2000 Daemon Consulting Inc.
+
+<P>
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 2 of the License, or (at your option)
+any later version.
+
+<P>
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details.
+
+<P>
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation, Inc., 59
+Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 </BODY>
 

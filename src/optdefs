@@ -1,0 +1,115 @@
+
+#
+# Copyright (C) 2000  Daemon Consulting Inc.
+# 
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+#
+
+# Type:
+#    str		string
+#    int		integer
+#    whole		whole number (>=0)
+#    natural		natural number (>=1)
+#
+# Context:
+#    speedy		command-line
+#    mod_speedycgi	apache module
+#    module		CGI::SpeedyCGI module
+#    all		all of the above
+#    frontend		speedy and mod_speedycgi
+#
+#    If no context specified, then not available externally.
+#
+
+option	Timeout
+type	whole
+letter	t
+defval	3600
+defdesc	one hour
+context	all
+desc	If no new requests have been received after this many seconds,
+desc	exit the persistent perl interpreter.  Zero indicates no timeout.
+
+option	MaxRuns
+type	whole
+letter	r
+defval	0
+defdesc	no max
+context	all
+desc	Once the perl interpreter has run this many times, re-exec the
+desc    backend process.  Zero indicates no maximum.  This option is useful
+desc	for processes that tend to consume resources over time.
+
+option	MaxBackends
+type	whole
+defval	0
+defdesc	no max
+letter	M
+context	frontend
+desc	If non-zero, limits the number of speedy backends running for this
+desc	cgi script to this value.
+
+option	BackendProg
+type	str
+letter	p
+context	frontend
+defval	$INSTALLBIN/speedy_backend
+desc	Path to the speedy backend program.
+
+option	TmpBase
+type	str
+letter	T
+defval	/tmp/speedy
+context	frontend
+desc	Use the given prefix for creating temporary files.  This must be
+desc	a filename prefix, not a directory name.
+
+option	PerlArgs
+type	str
+context mod_speedycgi
+desc	Command-line options to pass to the perl interpreter.
+
+option	BufsizPost
+type	natural
+letter	b
+context	speedy
+defval	1024
+desc	Use this many bytes for the buffer that sends data to the CGI script.
+
+option	BufsizGet
+type	natural
+letter	B
+context	speedy
+defval	8192
+desc	Use this many bytes for the buffer that receives data from the CGI
+desc	script.
+
+option  BECheckTimeout
+type	natural
+defval	1
+desc	The frontend waits this many seconds before waking up and checking for
+desc	dead backends.
+
+option	RestatTimeout
+type	natural
+defval	5
+desc	The frontend re-stats the perl-script this often while waiting for
+desc	a backend.
+
+option	BESpawns
+type	natural
+defval	1
+desc	The frontend can spawn this many backends simultaneously when there
+desc	are frontends waiting for backends.  More may not be better.

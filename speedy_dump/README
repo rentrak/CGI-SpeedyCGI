@@ -1,0 +1,4 @@
+
+This is not built by defuault.  Use the Makefile.PL here to build
+speedy.ph.  Then use speedy_dump.pl to dump out the contents of the
+speedy temp file.

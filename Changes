@@ -1,5 +1,33 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+2.0	Mon Sep 11 02:46:57 PDT 2000
+	
+	- Use unix sockets instead of tcp sockets.  Fixes the TIME_WAIT
+	  problem in 1.x releases.
+
+	- When a backend hits MaxRuns it now re-execs itself.  Setting
+	  MaxRuns to 1 allows pre-compilation of scripts that can't run
+	  persistently.
+
+	- Cleaner implementation of MaxBackends using frontend queuing.
+
+	- The backend is now a separate binary from the frontend.
+
+	- mod_spedycgi is now a shared object (DSO).
+
+	- Redesigned temp-file structure:
+
+	    - One temp-file for each user, used for all speedy processes
+	      running under that uid.
+
+	    - Track backends regardless of their state.
+
+	    - Two way queuing - backends waiting on frontends and frontends
+	      waiting on backends.
+
+	    - Support for multiple scripts running in a single interpreter.
+	      Not yet implemented in code.
+
 1.8.3  Sat Aug 01 16:52:20 GMT 2000
         
         - Added MAXBACKENDS feature to limit number of backend processes
