@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,6 +19,63 @@
 
 #include "speedy.h"
 
+void speedy_slot_remove(slotnum_t slotnum, slotnum_t *head, slotnum_t *tail) {
+    slotnum_t n = SLOT(slotnum).next_slot;
+    slotnum_t p = SLOT(slotnum).prev_slot;
+
+    if (n)
+	SLOT(n).prev_slot = p;
+    
+    if (p)
+	SLOT(p).next_slot = n;
+
+    if (*head == slotnum)
+	*head = n;
+
+    if (tail && *tail == slotnum)
+	*tail = p;
+}
+
+void speedy_slot_insert(slotnum_t slotnum, slotnum_t *head, slotnum_t *tail) {
+    SLOT(slotnum).next_slot = *head;
+    SLOT(slotnum).prev_slot = 0;
+    if (*head)
+	SLOT(*head).prev_slot = slotnum;
+    *head = slotnum;
+    if (tail && !*tail)
+	*tail = slotnum;
+}
+
+void speedy_slot_append(slotnum_t slotnum, slotnum_t *head, slotnum_t *tail) {
+    SLOT(slotnum).prev_slot = *tail;
+    SLOT(slotnum).next_slot = 0;
+    if (*tail)
+	SLOT(*tail).next_slot = slotnum;
+    *tail = slotnum;
+    if (!*head)
+	*head = slotnum;
+}
+
+#ifdef SPEEDY_BACKEND
+void speedy_slot_insert_sorted(
+    slotnum_t slotnum, slotnum_t *head, slotnum_t *tail,
+    int (*compar)(slotnum_t, slotnum_t)
+)
+{
+    slotnum_t *next_ptr;
+    for (next_ptr = head; *next_ptr; next_ptr = &(SLOT(*next_ptr).next_slot)) {
+	if (compar(slotnum, *next_ptr) <= 0) {
+	    SLOT(slotnum).next_slot = *next_ptr;
+	    SLOT(slotnum).prev_slot = SLOT(*next_ptr).prev_slot;
+	    SLOT(*next_ptr).prev_slot = slotnum;
+	    *next_ptr = slotnum;
+	    return;
+	}
+    }
+    speedy_slot_append(slotnum, head, tail);
+}
+#endif
+
 /* Allocate a slot */
 slotnum_t speedy_slot_alloc() {
     slotnum_t slotnum;
@@ -27,7 +84,8 @@ slotnum_t speedy_slot_alloc() {
     if ((slotnum = FILE_HEAD.slot_free)) {
 
 	/* Got it - remove it from the free list */
-	FILE_HEAD.slot_free = FILE_SLOT(free_slot, slotnum).next_slot;
+	FILE_HEAD.slot_free = SLOT(slotnum).next_slot;
+
     } else {
 	/* Allocate a new slot */
 	slotnum = FILE_HEAD.slots_alloced + 1;
@@ -54,17 +112,26 @@ slotnum_t speedy_slot_alloc() {
 	/* Successfully got a slot, so bump the count in the header */
 	FILE_HEAD.slots_alloced++;
     }
+    speedy_bzero(FILE_SLOTS + (slotnum-1), sizeof(slot_t));
     return slotnum;
 }
-
 
 /* Free a slot */
 void speedy_slot_free(slotnum_t slotnum) {
     if (slotnum) {
+	/* See if this is a previously freed slot */
+	if (SLOT(slotnum).prev_slot == slotnum)
+	    DIE_QUIET("Freeing free slot %d", slotnum);
+
+	/* Mark this slot free by pointing prev to itself */
+	SLOT(slotnum).prev_slot = slotnum;
+
 	/* Put at beginning of free list */
-	FILE_SLOT(free_slot, slotnum).next_slot = FILE_HEAD.slot_free;
+	SLOT(slotnum).next_slot = FILE_HEAD.slot_free;
 	FILE_HEAD.slot_free = slotnum;
     }
+    else
+	DIE_QUIET("Attempted free of slotnum 0");
 }
 
 slotnum_t speedy_slot_check(slotnum_t slotnum) {

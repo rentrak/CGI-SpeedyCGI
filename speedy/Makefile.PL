@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2001  Daemon Consulting Inc.
+# Copyright (C) 2002  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -25,7 +25,7 @@ require '../src/SpeedyMake.pl';
 
 sub my_name {'speedy'}
 sub my_name_full {shift->my_name}
-sub src_files_extra {'cb'}
+sub src_files_extra {qw(cb circ)}
 
 sub remove_libs { my $class = shift;
     '../util/remove_libs';

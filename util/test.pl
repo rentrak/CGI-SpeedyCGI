@@ -1,4 +1,6 @@
-
+BEGIN {
+    $SIG{PIPE} = 'IGNORE';
+}
 use strict;
 use CGI qw/:compile/;
 my $q = CGI->new;

@@ -6,12 +6,9 @@
 
 umask 022
 
-# Common code and variables
-. util/build_common
-
 name=${PKGNM}-$VERSION
 apache_name=${PKGNM}_${MODNM}-$VERSION
-os=`uname -s`-`uname -r | sed 's/-RELEASE$//'`
+os=`uname -s`-`uname -r | sed 's/-[A-Z]*RELEASE$//'`
 arch=`uname -m`
 
 run_pkg_create() {
@@ -26,7 +23,25 @@ run_pkg_create() {
 	-D COPYING \
 	$create_args \
 	$o &&
-    add_desc ${o}.tgz $is_apache $os $arch "$@"
+    add_desc ${o}.tgz $is_apache $os $arch "${1:-}"
+}
+
+make_plist() {
+    name=$1;	shift
+    pkgdep=$1;	shift
+    copy_pkgfiles $TMPDIR "$@"
+    (
+	echo "@name $name"
+	echo "@cwd $PREFIX"
+	echo "@srcdir ${TMPDIR}${PREFIX}"
+	for d in $pkgdep; do
+	    echo "@pkgdep $pkgdep"
+	done
+	echo "@owner root"
+	echo "@group wheel"
+	echo "@mode 755"
+	for f in `file_dest "$@"`; do echo $f; done | remove_prefix
+    ) >$TMPDIR/pkg-plist
 }
 
 #
@@ -40,15 +55,7 @@ grab_description >$TMPDIR/pkg-descr
 grab_summary >$TMPDIR/pkg-comment
 
 # Write the packing list file
-(
-    cat <<-END
-	@name $name
-	@cwd $PREFIX
-	END
-
-    # Insert the file names
-    for f in $STD_FILES; do echo $f; done | remove_prefix
-) >$TMPDIR/pkg-plist
+make_plist $name "" $STD_FILES
 
 run_pkg_create 0 $name ""
 if test $? -ne 0; then
@@ -61,17 +68,9 @@ fi
 
 echo $APACHE_DESC >$TMPDIR/pkg-descr
 echo $APACHE_DESC >$TMPDIR/pkg-comment
-(
-    cat <<-END
-	@name $apache_name
-	@cwd $PREFIX
-	@pkgdep $name
-	END
-
-    echo $MODULE | remove_prefix
-) >$TMPDIR/pkg-plist
+make_plist $apache_name $name $APACHE_FILES
 apache_install_script '$PKG_PREFIX' 'bak' >$TMPDIR/install
 apache_uninstall_script >$TMPDIR/uninstall
 
-run_pkg_create 1 $apache_name \
+run_pkg_create $APACHE_VERSION $apache_name \
     "-I $TMPDIR/install -K $TMPDIR/uninstall" "Apache Web Server"

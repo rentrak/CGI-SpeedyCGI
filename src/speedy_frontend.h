@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,15 +17,17 @@
  *
  */
 
-void speedy_frontend_connect(int *s, int *e);
+int speedy_frontend_connect(int socks[NUMFDS], slotnum_t *fslotnum);
 void speedy_frontend_dispose(slotnum_t gslotnum, slotnum_t fslotnum);
-char *speedy_frontend_mkenv(
+void speedy_frontend_mkenv(
     const char * const * envp, const char * const * scr_argv,
-    int min_alloc, int min_free,
-    int *env_size, int *buf_size, int script_has_cwd
+    int min_alloc, SpeedyBuf *sb, int script_has_cwd
 );
 void speedy_frontend_proto2(int err_sock, int first_byte);
-
+void speedy_frontend_remove_running(const slotnum_t fslotnum);
+int speedy_frontend_collect_status
+    (const slotnum_t fslotnum, int *exit_on_sig, int *exit_val);
+void speedy_frontend_clean_running();
 
 /* For strings shorter than this, use a one-byte string length when sending
  * strings from the frontend to the backend
@@ -37,3 +39,6 @@ void speedy_frontend_proto2(int err_sock, int first_byte);
 #define SPEEDY_CWD_DEVINO	1	/* Cwd dev/inode to follow */
 #define SPEEDY_CWD_UNKNOWN	2	/* Cwd dev/inode is unknown */
 
+#define speedy_frontend_dead(f) (!speedy_frontend_alive(f))
+#define speedy_frontend_alive(f) \
+    (speedy_util_kill(FILE_SLOT(fe_slot,(f)).pid, 0) != -1)

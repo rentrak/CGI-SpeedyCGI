@@ -5,7 +5,7 @@
 
 use strict;
 use CGI qw(:html);
-use vars qw($VERSION $title %info);
+use vars qw($VERSION $title);
 
 open(STDIN, '</dev/null');
 
@@ -16,24 +16,28 @@ $VERSION = shift(@ARGV);
 $title = "Binaries for SpeedyCGI version $VERSION";
 
 sub grab_vals { my $f = shift;
-    my %ret;
     open(F, $f) || die "${f}: $!\n";
+    $f =~ s/\.desc$//;
+    my %vals = (pkgfile=>$f);
     while (<F>) {
 	chop;
 	my($key,$val) = split(/=/, $_, 2);
 	if ($key eq 'DEPEND') {
-	    push(@{$ret{$key}}, $val);
+	    push(@{$vals{$key}}, $val);
 	} else {
-	    $ret{$key} = $val;
+	    $vals{$key} = $val;
 	}
     }
     close(F);
-    return \%ret;
+    return \%vals;
 }
 
+my(%info, %osarch);
 foreach my $f (<*.desc>) {
-    $f =~ s/.desc$//;
-    $info{$f} = &grab_vals("${f}.desc");
+    my $vals = &grab_vals($f);
+    my $key = join('|', $vals->{OS}, $vals->{ARCH}, $vals->{IS_APACHE});
+    $info{$key} = $vals;
+    $osarch{join('|', $vals->{OS}, $vals->{ARCH})} = 1;
 }
 
 open(F, '>index.html') || die "index.html: $!\n";
@@ -49,29 +53,50 @@ print
 		    'Architecture',
 		    'Package',
 		    'Dependencies',
-		    '&nbsp;',
 		]),
 	    ),
 	    map {
-		my $v = $info{$_};
+		my($os, $arch) = split(/\|/, $_);
+		my @list;
+		foreach my $x (0, 1, 2) {
+		    my $key = join('|', $os, $arch, $x);
+		    if (my $vals = $info{$key}) {
+			push(@list, $vals);
+		    }
+		}
+		my $rspan = scalar @list;
 		Tr(
-		    td([
-			$v->{OS},
-			$v->{ARCH},
-			$v->{IS_APACHE}
-			    ? 'Optional Apache Module'
-			    : 'Basic Distribution',
-			join('<br>',
-			    ($v->{IS_APACHE} ? 'Basic Distribution' : ()),
-			    @{$v->{DEPEND} || []},
-			) || '&nbsp;',
-			a({-href=>$_}, 'Download'),
-		    ]),
-		);
-	    } sort {
-		$info{$a}{OS}.$info{$a}{ARCH}.$info{$a}{IS_APACHE} cmp
-		$info{$b}{OS}.$info{$b}{ARCH}.$info{$b}{IS_APACHE}
-	    } keys %info
+		    td({-rowspan=>$rspan}, $os),
+		    td({-rowspan=>$rspan}, $arch),
+		    &doit($list[0]),
+		),
+		map {
+		    Tr(
+			&doit($_),
+		    ),
+		} @list[1..$#list],
+	    } (sort keys %osarch),
 	),
     ),
+    'Please contribute additional binary packages to sam@daemoninc.com. ',
+    'Packages can be built automatically on Solaris, systems with RPM ',
+    'and systems with BSD packages by running "make package". ',
+    'When done, send all the files in the binaries directory. ',
 ;
+
+sub doit { my $v = shift;
+    return (
+	td(
+	    a({-href=>$v->{pkgfile}},
+		$v->{IS_APACHE}
+		    ? "Optional Apache-$v->{IS_APACHE} Module"
+		    : 'Basic Distribution',
+	    ),
+	),
+	td(
+	    join('<br>',
+		@{$v->{DEPEND} || []},
+	    ) || '&nbsp;',
+	),
+    );
+}

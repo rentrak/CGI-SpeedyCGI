@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -21,6 +21,11 @@
 
 static struct timeval saved_time;
 static int my_euid = -1;
+static int saved_pid;
+#ifdef SPEEDY_DEBUG
+static int savecore;
+#endif
+
 
 int speedy_util_pref_fd(int oldfd, int newfd) {
     if (newfd == oldfd || newfd == PREF_FD_DONTCARE || oldfd == -1)
@@ -81,9 +86,12 @@ int speedy_util_argc(const char * const * argv) {
 #endif
 
 SPEEDY_INLINE int speedy_util_getpid() {
-    static int saved_pid;
     if (!saved_pid) saved_pid = getpid();
     return saved_pid;
+}
+
+void speedy_util_pid_invalidate() {
+    saved_pid = 0;
 }
 
 static void just_die(const char *fmt, va_list ap) {
@@ -97,6 +105,9 @@ static void just_die(const char *fmt, va_list ap) {
 	strcat(buf, strerror(errno));
     }
     strcat(buf, "\n");
+#   ifdef SPEEDY_DEBUG
+	savecore = 1;
+#   endif
     speedy_abort(buf);
 }
 
@@ -264,12 +275,30 @@ SPEEDY_INLINE int speedy_util_open_stat(const char *path, struct stat *stbuf)
 
 void speedy_util_exit(int status, int underbar_exit) {
 
-#ifdef SPEEDY_PROFILING
-    end_profiling(underbar_exit);
-#endif
+#   ifdef SPEEDY_PROFILING
+	end_profiling(underbar_exit);
+#   endif
+
+#   ifdef SPEEDY_DEBUG
+	if (savecore) {
+	    char buf[200];
+
+	    mkdir("/tmp/speedy_core", 0777);
+	    sprintf(buf, "/tmp/speedy_core/%d", getpid());
+	    mkdir(buf, 0777);
+	    chdir(buf);
+	    kill(getpid(), SIGFPE);
+	}
+#   endif
 
     if (underbar_exit)
 	_exit(status);
     else
 	exit(status);
+}
+
+int speedy_util_kill(pid_t pid, int sig) {
+    return pid
+	? (pid == speedy_util_getpid() ? 0 : kill(pid, sig))
+	: -1;
 }

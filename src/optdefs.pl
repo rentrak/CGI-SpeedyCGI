@@ -2,7 +2,7 @@
 # Generate C-code and documentation from the optdefs file
 #
 #
-# Copyright (C) 2001  Daemon Consulting Inc.
+# Copyright (C) 2002  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -109,15 +109,15 @@ print "OptRec speedy_optdefs[] = {\n";
 
 foreach my $opt (@options) {
     my @toprint = (
-	["'%s'",	$opt->{letter} || "\\0"],
-	["OTYPE_%s",	uc($opt->{type})],
-	["%d",		0],
-	["%d",		length($opt->{option})],
 	["\"%s\"",	uc($opt->{option})],
 	["(void*)%s",	!defined($opt->{defval}) ? 0 :
 	    ($ctype{$opt->{type}} eq 'char*'
 		? "\"$opt->{defval}\"" : $opt->{defval})
 	],
+	["'%s'",	$opt->{letter} || "\\0"],
+	["OTYPE_%s",	uc($opt->{type})],
+	["%d",		0],
+	["%d",		length($opt->{option})],
     );
     my $fmt = "\t{\n". join('', map {"\t\t".$_->[0].",\n"} @toprint) . "\t},\n";
     printf $fmt, map {$_->[1]} @toprint;
@@ -175,46 +175,75 @@ for (my $i = 0; $i <= $#options; ++$i) {
 print "{NULL}\n};\n";
 
 #
+# Write mod_speedycgi2_cmds.c
+#
+&open_file("mod_speedycgi2_cmds.c");
+print "static const command_rec cgi_cmds[] =\n{\n";
+for (my $i = 0; $i <= $#options; ++$i) {
+    my $opt = $options[$i];
+
+    next unless $opt->{context} && $opt->{context}{mod_speedycgi};
+    
+    printf "AP_INIT_TAKE1(\"Speedy%s\", set_option, (void*)(speedy_optdefs+%d), RSRC_CONF,\n     \"%s\"),\n",
+	$opt->{option}, $i, &quote($opt->{desc});
+}
+print "    {NULL}\n};\n";
+
+#
 # Write SpeedyCGI.pm
 #
 &open_file('SpeedyCGI.pm', 1);
 open(I, '<SpeedyCGI.src') || die "SpeedyCGI.src: $!\n";
+my $doprint = 1;
 while (<I>) {
-    if (/INSERT_OPTIONS_POD_HERE/) {
-	foreach my $opt (@options) {
-	    next unless $opt->{context};
-	    my $cmdline = 'N/A';
-	    if ($opt->{letter}) {
-		my $arg = '';
-		if ($opt->{type} ne 'toggle') {
-		    $arg = $ctype{$opt->{type}} eq 'char*' ? '<string>' : '<number>'
-		}
-		$cmdline = sprintf("-%s%s", $opt->{letter}, $arg);
-	    }
-	    printf "=item %s\n\n", $opt->{option};
-	    printf "    Command Line    : %s\n", $cmdline;
-	    if ($opt->{type} ne 'toggle') {
-		my $defval = defined($opt->{defval}) ? $opt->{defval} : '';
-		if ($ctype{$opt->{type}} eq 'char*') {
-		    $defval = "\"$defval\"";
-		}
-		printf "    Default Value   : %s%s\n",
-		    $defval,
-		    defined($opt->{defdesc}) ? " ($opt->{defdesc})" : '';
-	    }
-	    printf "    Context         : %s\n",
-		join(', ', sort keys %{$opt->{context}});
-	    printf "\n";
-	    printf "    Description:\n\n";
-	    printf "%s\n\n", wrap("\t", "\t", $opt->{desc});
+    if (/^SP_DIRECTIVE\s+(\S+)\s*$/) {
+	my $directive = $1;
+	if ($directive eq 'INSERT_OPTIONS_POD_HERE') {
+	    &insert_pod_options;
+	}
+	elsif ($directive eq 'BEGIN_ONLY_IN_SP') {
+	    $doprint = !('SpeedyCGI' eq 'PersistentPerl');
+	}
+	elsif ($directive eq 'END_ONLY_IN_SP') {
+	    $doprint = 1;
 	}
     } else {
-	print;
+	if ($doprint) {print;}
     }
 }
 close I;
 
 close F;
+
+sub insert_pod_options {
+    foreach my $opt (@options) {
+	next unless $opt->{context};
+	my $cmdline = 'N/A';
+	if ($opt->{letter}) {
+	    my $arg = '';
+	    if ($opt->{type} ne 'toggle') {
+		$arg = $ctype{$opt->{type}} eq 'char*' ? '<string>' : '<number>'
+	    }
+	    $cmdline = sprintf("-%s%s", $opt->{letter}, $arg);
+	}
+	printf "=item %s\n\n", $opt->{option};
+	printf "    Command Line    : %s\n", $cmdline;
+	if ($opt->{type} ne 'toggle') {
+	    my $defval = defined($opt->{defval}) ? $opt->{defval} : '';
+	    if ($ctype{$opt->{type}} eq 'char*') {
+		$defval = "\"$defval\"";
+	    }
+	    printf "    Default Value   : %s%s\n",
+		$defval,
+		defined($opt->{defdesc}) ? " ($opt->{defdesc})" : '';
+	}
+	printf "    Context         : %s\n",
+	    join(', ', sort keys %{$opt->{context}});
+	printf "\n";
+	printf "    Description:\n\n";
+	printf "%s\n\n", wrap("\t", "\t", $opt->{desc});
+    }
+}
 
 
 sub open_file { my($fname, $use_pound) = @_;

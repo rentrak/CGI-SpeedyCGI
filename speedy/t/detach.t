@@ -42,8 +42,10 @@ utime time, time, $scr;
 
 # With a large enough buffer, backend should detach and we get same pids
 @pids = (&doit($lgbuf), &doit($lgbuf));
+## print STDERR join(' ', 'pids=', @pids, "\n");
 &result($pids[0] && $pids[0] == $pids[1]);
 
 # Test the test - a small buffer should give different pids
 @pids = (&doit($smbuf), &doit($smbuf));
+## print STDERR join(' ', 'pids=', @pids, "\n");
 &result($pids[0] && $pids[1] && $pids[0] != $pids[1]);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,12 +17,12 @@
  *
  */
 
-void speedy_script_find(slotnum_t *gslotnum_p, slotnum_t *sslotnum_p);
-int speedy_script_changed();
+slotnum_t speedy_script_find();
+int  speedy_script_changed();
 void speedy_script_close();
-int speedy_script_open();
+int  speedy_script_open();
 const struct stat *speedy_script_getstat();
-int speedy_script_open_failure();
+int  speedy_script_open_failure();
 void speedy_script_munmap();
 SpeedyMapInfo *speedy_script_mmap(int max_size);
 void speedy_script_missing();

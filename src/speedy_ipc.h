@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,13 +17,14 @@
  *
  */
 
-#define LISTEN_BACKLOG		2
+#define NUMFDS		3
+#define LISTEN_BACKLOG	NUMFDS
 
 void speedy_ipc_listen(slotnum_t slotnum);
 void speedy_ipc_listen_fixfd(slotnum_t slotnum);
 void speedy_ipc_unlisten();
-int speedy_ipc_connect(slotnum_t slotnum, int s, int e);
-void speedy_ipc_connect_prepare(int *s, int *e);
-int speedy_ipc_accept_ready(int wakeup);
-int speedy_ipc_accept(int wakeup);
+int  speedy_ipc_connect(slotnum_t slotnum, const int socks[NUMFDS]);
+void speedy_ipc_connect_prepare(int socks[NUMFDS]);
+int  speedy_ipc_accept_ready(int wakeup);
+int  speedy_ipc_accept(int wakeup);
 void speedy_ipc_cleanup(slotnum_t slotnum);

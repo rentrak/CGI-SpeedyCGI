@@ -4,13 +4,15 @@ package SpeedyFile;
 
 require 'speedy.ph';
 
+my $FILEREV = 5;
+
 sub new { my($class, $fname) = @_;
     bless {fname=>$fname}, $class;
 }
 
 sub fname { my $self = shift;
     $self->{fname} ||=
-	sprintf('%s.3.%x.F', ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
+	sprintf("%s.${FILEREV}.%x.F", ($ENV{SPEEDY_TMPBASE} || '/tmp/speedy'), $>);
 }
 
 sub data { my $self = shift;
@@ -36,16 +38,12 @@ sub file_head {
     shift->get_struct('_file_head', 0);
 }
 
-my $slot_size = &_dummy_slot'sizeof('slot_size');
+my $slot_size = &_dummy_slot'sizeof(_dummy_slot'slot);
 my $slots_offset = $_file'offsetof[&_file'slots];
 
 sub slot { my($self, $slotnum, $type) = @_;
-    SpeedySlot->new(
-	$self->get_struct($type, $slots_offset + ($slotnum-1) * $slot_size),
-	$slotnum
-    );
+    SpeedySlot->new($slotnum, $self, $type, $slots_offset + ($slotnum-1) * $slot_size);
 }
-
 
 
 package SpeedyStruct;
@@ -62,7 +60,7 @@ sub new { my($class, $data, $type) = @_;
 }
 
 sub fieldnames { my $self = shift;
-    $self->{fieldnames} ||= [grep {/./} @{$self->{type}. "'fieldnames"}];
+    $self->{fieldnames} ||= [grep {/./ && !/slot_u/} @{$self->{type}. "'fieldnames"}];
 }
 
 sub value { my $self = shift;
@@ -103,25 +101,41 @@ sub dump { my $self = shift;
     foreach my $fld (@{$self->fieldnames}) {
 	push(@lines, $self->fmt_key_val($fld, $value->{$fld}));
     }
-    push(@lines, $self->fmt_key_val('type', $self->{type}));
     return \@lines;
 }
 
 
-
 package SpeedySlot;
 
-@ISA = 'SpeedyStruct';
+sub fmt_key_val {
+    sprintf('%-15s = %s', @_);
+}
 
-sub new { my($class, $self, $slotnum) = @_;
-    $self->{slotnum} = $slotnum;
+sub new { my($class, $slotnum, $file, $type, $offset) = @_;
+    my $self = {slotnum=>$slotnum, type=>$type};
+    $self->{structs} = [
+	$file->get_struct($type, $offset),
+	$file->get_struct('slot', $offset),
+    ];
     bless $self, $class;
+}
+
+sub fieldnames { my $self = shift;
+    [map {$_->fieldnames} @{$self->{structs}}];
 }
 
 sub slotnum {shift->{slotnum}}
 
 sub dump { my $self = shift;
-    [$self->fmt_key_val('slotnum', $self->slotnum), @{$self->SUPER::dump}];
+    return [
+	&fmt_key_val('slotnum', $self->{slotnum}),
+	(map {@{$_->dump}} @{$self->{structs}}),
+        &fmt_key_val('type', $self->{type}),
+    ];
+}
+
+sub value { my $self = shift;
+    return {map {%{$_->value}} @{$self->{structs}}};
 }
 
 1;

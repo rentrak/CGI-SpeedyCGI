@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -64,6 +64,11 @@
 #include <sys/wait.h>
 #endif
 
+/* For readv/writev.  I_SYSUIO is new in perl 5.6 */
+#if defined(I_SYSUIO) || PATCHLEVEL < 6
+#include <sys/uio.h>
+#endif
+
 /* Found in pp_sys.c... */
    /* fcntl.h might not have been included, even if it exists, because
       the current Configure only sets I_FCNTL if it's needed to pick up
@@ -76,7 +81,12 @@
 #include <patchlevel.h>
 
 /* For mmap */
+/* We should use I_SYS_MMAN here, but it doesn't seem to work yet */
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 
 /* For kill, sig* functions */
+#if !defined(_WIN32) && (!defined(NSIG) || defined(M_UNIX) || defined(M_XENIX))
 #include <signal.h>
+#endif

@@ -7,8 +7,11 @@ use strict;
 use Socket;
 use Cwd;
 
-my $srvroot	= '/tmp/mod_speedycgi_test';
-my $srvport	= 8529;
+my $version	= `httpd -v` =~ /Apache.2/ ? 2 : 1;
+my $srvroot	= "/tmp/mod_speedycgi${version}_test";
+my $srvport	= 8528 + $version;
+my $tcp_proto	= getprotobyname('tcp');
+my $lo_addr	= inet_aton('localhost');
 
 sub mod_dir {
     &Cwd::cwd;
@@ -28,7 +31,8 @@ sub write_conf { my $extracfg = shift;
     my($mod_dir, $docroot, $grp) = (&mod_dir, &docroot, $));
     $grp =~ s/\s.*//;
     my $module = $ENV{SPEEDY_MODULE}
-	|| "$mod_dir/mod_speedycgi.so";
+	|| ($version == 1
+	    ? "$mod_dir/mod_speedycgi.so" : "$mod_dir/.libs/mod_speedycgi.so");
     my $backend = $ENV{SPEEDY_BACKENDPROG}
 	|| "$mod_dir/../speedy_backend/speedy_backend";
 
@@ -43,18 +47,13 @@ sub write_conf { my $extracfg = shift;
 	ServerRoot		$srvroot
 	User			$user
 	Group			#$grp
-	Port			$srvport
 	ServerName		localhost
 	DocumentRoot		$docroot
 	ErrorLog		error_log
 	PidFile			httpd.pid
 	LockFile		lock_file
-	AccessConfig		/dev/null
-	ResourceConfig		/dev/null
-	ScoreBoardFile		/dev/null
 	Options			+ExecCGI
 	LoadModule		speedycgi_module $module
-	AddModule		mod_speedycgi.c
 	SpeedyBackendProg	$backend
 	<Directory $docroot/speedy>  
 	DefaultType		 speedycgi-script
@@ -63,6 +62,19 @@ sub write_conf { my $extracfg = shift;
 	TypesConfig /dev/null
 	</IfModule>
     ";
+    if ($version > 1) {
+	$cfg .= "
+	Listen			$srvport
+	";
+    } else {
+	$cfg .= "
+	Port			$srvport
+	AddModule		mod_speedycgi.c
+	AccessConfig		/dev/null
+	ResourceConfig		/dev/null
+	ScoreBoardFile		/dev/null
+	";
+    }
     $cfg .= $extracfg if (defined($extracfg));
     $cfg =~ s/\n\s+/\n/g;
 
@@ -92,6 +104,7 @@ sub start_httpd {
 	kill(9, $pid);
 	sleep 1;
     }
+    my $x = $|; $| = 1; print ""; $| = $x; # Avoid double-flush on stdout.
     if (fork == 0) {
 	close(STDOUT);
 	close(STDERR);
@@ -109,13 +122,7 @@ sub start_httpd {
     }
     wait;
     for (my $tries = 4; $tries; --$tries) {
-	my $test = '';
-	eval {
-	    local $SIG{ALRM} = sub { die "alarm clock restart" };
-	    alarm 2;
-	    $test = html_get('/htmltest');
-	    alarm 0;
-	};
+	my $test = html_get('/htmltest');
 	# print STDERR "debug=$test\n";
 	return if $test =~ /html test/i;
 	sleep(1);
@@ -124,14 +131,20 @@ sub start_httpd {
 }
 
 sub http_get { my $relurl = shift;
-    my $paddr = sockaddr_in($srvport, inet_aton('localhost'));
-    socket(SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
+    my $paddr = sockaddr_in($srvport, $lo_addr);
+    socket(SOCK, PF_INET, SOCK_STREAM, $tcp_proto);
     return '' unless connect(SOCK, $paddr);
     my $oldfh = select SOCK;
     $| = 1;
     print "GET $relurl HTTP/1.0\n\n";
     select $oldfh;
-    my @ret = <SOCK>;
+    my @ret;
+    eval {
+	local $SIG{ALRM} = sub {die "alarm clock"};
+	alarm 2;
+	@ret = <SOCK>;
+	alarm 0;
+    };
     close(SOCK);
     return wantarray ? @ret : join('', @ret);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,12 +18,12 @@
  */
 
 typedef struct _OptRect {
+    const char * const	name;
+    void		*value;
     const char		letter;
     const char		type;
     char		flags;
     const unsigned char	name_len;
-    const char		*name;
-    void		*value;
 } OptRec;
 
 /* For the flags field above */

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,6 +26,11 @@
 #define newSVpvn(s,l) newSVpv((l) ? (s) : "", (l))
 #endif
 
+/* For declaring xs_init prior to 5.6 */
+#ifndef pTHXo
+#define pTHXo void
+#endif
+
 /*
  * Prior to perl 5.6.0 these funcs were prefixed with "perl_"
  */
@@ -47,6 +52,12 @@
 #ifndef eval_sv
 #	define eval_sv perl_eval_sv
 #endif
+#ifndef eval_pv
+#	define eval_pv perl_eval_pv
+#endif
+#ifndef call_pv
+#	define call_pv perl_call_pv
+#endif
 
 
 /*
@@ -62,7 +73,8 @@
 
 #define DEVFD "/dev/fd/%d"
 
-#define DEVINO_STR_SIZE (HEX_STR_SIZE(dev_t)+HEX_STR_SIZE(ino_t)+2)
+#define DEVINO_STR_SIZE \
+	(HEX_STR_SIZE(speedy_dev_t)+HEX_STR_SIZE(speedy_ino_t)+2)
 #define DEVINO_SAME(a,b) ((a).i == (b).i && (a).d == (b).d)
 #define DEVINO_GET(fp,devino) PerlIO_read(fp, &(devino), sizeof(devino))
 #define my_SvPV(sv) SvPV(sv, junk_len)
@@ -141,13 +153,15 @@ static SpeedyPerlVar SpeedyPerlVars[] = {
 
 /* End of generated section */
 
-static PerlInterpreter	*my_perl;
-static slotnum_t	gslotnum, bslotnum;
-static SpeedyCwd	*orig_cwd;
-static int		cwd_fd = -1;
 static const char 	*dev_null = "/dev/null";
+
+static PerlInterpreter	*my_perl;
+static int		cwd_fd = -1;
 static STRLEN		junk_len;
 static HV		*cwd_hash, *scr_hash;
+static const int	caught_sigs[] = {SIGTERM, SIGHUP, SIGINT};
+
+#define NUMSIGS (sizeof(caught_sigs) / sizeof(int))
 
 /*
  * Stuff to be stashed in cwd_hash / scr_hash
@@ -159,8 +173,8 @@ static HV		*cwd_hash, *scr_hash;
 
 static int devino_str(SpeedyDevIno devino, char str[DEVINO_STR_SIZE]) {
     char *bp = str;
-    ino_t i = devino.i;
-    dev_t d = devino.d;
+    speedy_ino_t i = devino.i;
+    speedy_dev_t d = devino.d;
 
     HEX_CVT(i, bp);
     *bp++ = '_';
@@ -212,7 +226,6 @@ static void dump_hash(HV *hv, PerlIO *pio) {
 }
 
 #endif /* DUMP_HASH */
-
 
 /* Locate a devino in one of the hashes */
 static SV **find_devino(SpeedyDevIno devino, HV *hash, int lval) {
@@ -304,6 +317,9 @@ static int chdir_path(const char *path, SpeedyDevIno *devino) {
     cwd_fd = retval != -1
 	? speedy_util_pref_fd(open(".", O_RDONLY), PREF_FD_CWD)
 	: -1;
+    
+    if (cwd_fd != -1)
+	fcntl(cwd_fd, F_SETFD, FD_CLOEXEC);
 
     /* TEST - simulate unreadable "." directory */
     /* close(cwd_fd); cwd_fd = -1; */
@@ -343,17 +359,6 @@ static int quick_cd(SpeedyDevIno dest) {
     return DEVINO_SAME(dest, devino);
 }
 
-/* Remove myself from the temp file */
-static void remove_from_temp() {
-    if (bslotnum && gslotnum) {
-	speedy_file_set_state(FS_WRITING);
-	speedy_backend_check_next(gslotnum, bslotnum);
-	speedy_backend_dispose(gslotnum, bslotnum);
-	speedy_group_cleanup(gslotnum);
-	bslotnum = gslotnum = 0;
-    }
-}
-
 static void *get_perlvar(SpeedyPerlVar *pv) {
     if (!pv->ptr) {
 	switch(pv->type) {
@@ -380,24 +385,7 @@ static void *get_perlvar(SpeedyPerlVar *pv) {
 }
 
 /* Shutdown and exit. */
-static void all_done(int exec_myself) {
-
-    /* Re-open the file to make sure we're not going to remove a temp
-     * file belonging to a newer backend using this slot in a newer
-     * version of this file
-     */
-    speedy_file_set_state(FS_HAVESLOTS);
-    speedy_file_need_reopen();
-
-    if (exec_myself) {
-	if (bslotnum) {
-	    /* Lower the maturity level for this slot */
-	    speedy_file_set_state(FS_WRITING);
-	    FILE_SLOT(be_slot, bslotnum).maturity = 0;
-	}
-    } else {
-	remove_from_temp();
-    }
+static void all_done() {
     speedy_file_set_state(FS_CLOSED);
 
     /* Destroy the interpreter */
@@ -408,44 +396,30 @@ static void all_done(int exec_myself) {
 
 	perl_destruct(my_perl);
     }
-    if (exec_myself) {
-	/* Flush all open files */
-	PerlIO_flush(NULL);
-
-	/* Chdir back to where we started */
-	if (orig_cwd && !quick_cd(orig_cwd->devino))
-	    chdir_path_sv(orig_cwd->path);
-
-	speedy_util_execvp((speedy_opt_orig_argv()[0]), speedy_opt_orig_argv());
-
-	/* Failed, so remove ourself from the temp file */
-	remove_from_temp();
-    }
     speedy_util_exit(0,0);
-}
-
-/* Signal handler */
-static Signal_t doabort_sig(int x) {
-    all_done(0);
 }
 
 /* Wait for a connection from a frontend */
 static void backend_accept() {
-    /* Loop forever */
-    while (1) {
+    SigList sl;
+    int ok;
 
-	/* Wait for an accept or timeout */
-	if (speedy_ipc_accept(OPTVAL_TIMEOUT*1000) || speedy_ipc_accept(0)) {
-	    /* Got an accept */
-	    return;
-	}
-	all_done(0);
-    }
+    /* Set up caught/unblocked signals to exit on */
+    speedy_sig_init(&sl, caught_sigs, NUMSIGS, SIG_UNBLOCK);
+
+    /* Wait for an accept or timeout */
+    ok = speedy_ipc_accept(OPTVAL_TIMEOUT*1000);
+
+    /* Put signals back to original settings */
+    speedy_sig_free(&sl);
+
+    /* If timed out or signal, then finish up */
+    if (!ok)
+	all_done();
 }
 
-
 /* Read in a string on stdin. */
-SPEEDY_INLINE static char *get_string(register PerlIO *pio_in, int *sz_ret) {
+static char *get_string(register PerlIO *pio_in, int *sz_ret) {
     int sz;
     register char *buf;
 
@@ -492,16 +466,7 @@ static void do_proto2(char **cwd_path) {
     }
 }
 
-/* Catch pesky signals */
-static void set_sigs() {
-    rsignal(SIGPIPE, &doabort_sig);
-    rsignal(SIGALRM, &doabort_sig);
-    rsignal(SIGTERM, &doabort_sig);
-    rsignal(SIGHUP,  &doabort_sig);
-    rsignal(SIGINT,  &doabort_sig);
-}
-
-static SpeedyCwd *cwd_new(const char *path, int path_is_dot) {
+static SpeedyCwd *cwd_new(const char *path) {
     char key[DEVINO_STR_SIZE];
     int key_len;
     SV *sv;
@@ -510,7 +475,7 @@ static SpeedyCwd *cwd_new(const char *path, int path_is_dot) {
     speedy_new(cwd, 1, SpeedyCwd);
 
     /* Chdir to the given path */
-    if (!path || chdir_path((path_is_dot ? "." : path), &(cwd->devino)) == -1) {
+    if (!path || chdir_path(path, &(cwd->devino)) == -1) {
 	speedy_free(cwd);
 	return NULL;
     }
@@ -605,13 +570,28 @@ static void load_script(
     }
 }
 
+static void cleanup_after_perl() {
+
+    /* Cached time is now invalid */
+    speedy_util_time_invalidate();
+
+    /* Terminate if a forked child returned */
+    if (getpid() != speedy_util_getpid())
+	speedy_util_exit(0,0);
+
+    /* Cancel any alarms */
+    alarm(0);
+
+    /* Tell our file code that its fd is suspect */
+    speedy_file_fd_is_suspect();
+}
+
 /* One run of the perl process, do stdio using socket. */
-static void onerun(int single_script) {
-    int sz, new_script, cwd_where;
+static int onerun(int single_script) {
+    int sz, new_script, cwd_where, exit_val;
     char *scr_path;
     SpeedyDevIno fe_scr;
     SpeedyScript *scr;
-    pid_t mypid = speedy_util_getpid();
     PerlIO *pio_in, *pio_out, *pio_err;
     register char *s, *buf;
 
@@ -705,7 +685,7 @@ static void onerun(int single_script) {
 	    }
 	    if (!done) {
 		/* Chdir to the path the frontend gave us and get its cwd */
-		cwd = cwd_new(dir, 0);
+		cwd = cwd_new(dir);
 	    }
 
 	    /* Store the cwd struct with this script */
@@ -755,7 +735,7 @@ static void onerun(int single_script) {
 	    
 	    /* Cd to this path and get its cwd structure back */
 	    if (dir) {
-		cwd = cwd_new(dir, 0);
+		cwd = cwd_new(dir);
 		speedy_free(dir);
 	    }
 	}
@@ -768,6 +748,13 @@ static void onerun(int single_script) {
 	if (!did_proto2)
 	    do_proto2(NULL);
     }
+
+    /* Do shutdowns so we get an error when writing/reading in the wrong
+     * direction
+     */
+    shutdown(0, 1);
+    shutdown(1, 0);
+    shutdown(2, 0);
 
     /*
      * Load the script if it's new
@@ -783,18 +770,14 @@ static void onerun(int single_script) {
     if (!single_script)
 	sv_setsv(PERLVAL_SUB, scr->handler);
 
-    /* Run the perl code.  Ignore return value since we want to stay persistent
-     * no matter what the return code.
+    /* Run the perl code.
      */
-    (void) perl_run(my_perl);
-    speedy_util_time_invalidate();
+    exit_val = perl_run(my_perl);
 
-    /* Terminate any forked children */
-    if (getpid() != mypid)
-	speedy_util_exit(0,0);
-
-    /* Call any cleanup functions */
+    /* Call any registered cleanup functions */
     my_call_sv(get_perlvar(&PERLVAR_RUN_CLEANUP));
+
+    cleanup_after_perl();
 
     /* Flush output, in case perl's stdio/reopen below don't */
     PerlIO_flush(pio_out);
@@ -806,16 +789,38 @@ static void onerun(int single_script) {
     do_close(PERLVAL_STDIN,  FALSE);
 
     /* Get stdio files back in shape */
-    PerlIO_reopen(dev_null, "r", pio_in);
-    PerlIO_reopen(dev_null, "w", pio_out);
-    PerlIO_reopen(dev_null, "w", pio_err);
+    if (PerlIO_reopen(dev_null, "r", pio_in ) == NULL ||
+	PerlIO_reopen(dev_null, "w", pio_out) == NULL ||
+	PerlIO_reopen(dev_null, "w", pio_err) == NULL)
+    {
+	speedy_util_die("Cannot open /dev/null");
+    }
     close(0); close(1); close(2);
-
-    /* Reset signals */
-    set_sigs();
 
     /* Hack for CGI.pm */
     my_call_sv(get_perlvar(&PERLVAR_RESET_GLOBALS));
+
+    /* Copy option values in from the perl vars */
+    if (SvIV(PERLVAL_OPTS_CHANGED)) {
+	int i;
+#       ifdef __SUNPRO_C
+	    /* Bug in Sun WorkShop 6 2000/04/07 C 5.1 optimizer.
+	     * It was consistently failing shutdown test #4 wwhich calls
+	     * the shutdown_now method.  That method sets MAXRUNS to 1,
+	     * then exits.  For some reason the compiler decided to store
+	     * OPTVAL_MAXRUNS in a register and ignore the fact that
+	     * speedy_opt_set can modify the value.
+	     */
+	    OPTREC_MAXRUNS.value = (void*)atoi("100");
+#       endif
+	for (i = 0; i < SPEEDY_NUMOPTS; ++i) {
+	    OptRec *o = speedy_optdefs + i;
+	    SV **svp = hv_fetch(PERLVAL_OPTS, o->name, o->name_len, 0);
+	    if (svp)
+		(void) speedy_opt_set(o, my_SvPV(*svp));
+	}
+	sv_setiv(PERLVAL_OPTS_CHANGED, 0);
+    }
 
 #ifdef DUMP_HASH
     {
@@ -830,7 +835,10 @@ static void onerun(int single_script) {
 	PerlIO_close(pio);
     }
 #endif
+
+    return exit_val;
 }
+
 
 /* Called from xs_init */
 void speedy_xs_init() {
@@ -857,10 +865,6 @@ void speedy_xs_init() {
 	gv_fetchpv(PERLVAR_I_AM_SPEEDY.name, 0, PERLVAR_I_AM_SPEEDY.type)
     );
 
-    /* Save our current directory now in case script changes it */
-    if ((orig_cwd = cwd_new(speedy_util_getcwd(), 1)))
-	orig_cwd->refcnt++;
-
     /*
      * Initialize options variables in our module.
      */
@@ -876,23 +880,14 @@ void speedy_xs_init() {
     }
 }
 
-void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
-{
-    int numrun, i;
+void speedy_perl_init() {
     char **perl_argv;
     const char *temp_script_name;
-    int use_devfd, single_script;
+    int use_devfd, is_new;
     char dev_fd_name[sizeof(DEVFD)+10];
     SpeedyScript *scr;
-    extern void xs_init();
-
-    /* Copy into globals */
-    gslotnum		= _gslotnum;
-    bslotnum		= _bslotnum;
-    single_script	= DOING_SINGLE_SCRIPT;
-
-    /* Catch signals */
-    set_sigs();
+    extern void xs_init(pTHXo);
+    int single_script = DOING_SINGLE_SCRIPT;
 
     /* Allocate and construct new perl */
     if (!(my_perl = perl_alloc()))
@@ -923,6 +918,7 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
     {
 	DIE_QUIET("perl_parse error");
     }
+    cleanup_after_perl();
 
     /* If we had to use /dev/fd/N, perl will close the file for us, so
      * make sure our code knows it's closed.  If we need it from here on out
@@ -932,7 +928,7 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 	speedy_script_close();
 
     /* Create a SpeedyScript entry for the standard script */
-    scr = find_scr(speedy_util_stat_devino(speedy_script_getstat()), &i);
+    scr = find_scr(speedy_util_stat_devino(speedy_script_getstat()), &is_new);
 
     /* If using groups, try pre-loading the script to save time later */
     if (!single_script && !speedy_script_open_failure()) {
@@ -940,13 +936,16 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 	    speedy_util_stat_devino(speedy_script_getstat()),
 	    scr, speedy_opt_script_fname()
 	);
+	cleanup_after_perl();
     }
-
-    /* Make sure script is closed */
-    speedy_script_close();
 
     /* Time to close stderr */
     close(2);
+}
+
+void speedy_perl_run(slotnum_t gslotnum, slotnum_t bslotnum) {
+    int numrun, exit_val;
+    int single_script = DOING_SINGLE_SCRIPT;
 
     /* Start listening on our socket */
     speedy_ipc_listen(bslotnum);
@@ -954,24 +953,19 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
     /* Main loop */
     for (numrun = 0; !OPTVAL_MAXRUNS || numrun < OPTVAL_MAXRUNS; ++numrun) {
 
-	/* Lock/mmap our temp file */
-	speedy_file_set_state(FS_WRITING);
-
-	/* If our group is invalid, exit quietly */
-	if (!speedy_group_isvalid(gslotnum)) {
-	    gslotnum = 0;
-	    speedy_file_set_state(FS_HAVESLOTS);
-	    all_done(0);
-	}
-
-	/* Check our backend siblings */
-	speedy_backend_check_next(gslotnum, bslotnum);
+	/* Lock/mmap our temp file.  If our group is invalid, exit quietly */
+	if (getppid() == 1 || !speedy_group_lock(gslotnum))
+	    all_done();
 
 	/* Update our maturity level */
 	FILE_SLOT(be_slot, bslotnum).maturity = numrun ? 2 : 1;
 
 	/* Put ourself onto the be_wait list */
 	speedy_backend_be_wait_put(gslotnum, bslotnum);
+
+	/* If we were listed as starting, turn that off */
+	if (FILE_SLOT(gr_slot, gslotnum).be_starting == speedy_util_getpid())
+	    FILE_SLOT(gr_slot, gslotnum).be_starting = 0;
 
 	/* Send out alarm signal to frontends */
 	speedy_group_sendsigs(gslotnum);
@@ -985,35 +979,51 @@ void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum)
 	/* Do an accept on our socket */
 	backend_accept();
 
+	/* Lock file.  If our group is invalid, exit quietly */
+	if (!speedy_group_lock(gslotnum))
+	    all_done();
+
+	/* If we were listed as starting, turn that off */
+	if (FILE_SLOT(gr_slot, gslotnum).be_starting == speedy_util_getpid())
+	    FILE_SLOT(gr_slot, gslotnum).be_starting = 0;
+
+	/* Wake up any waiting frontends */
+	speedy_group_sendsigs(gslotnum);
+
+	/* Unlock the file */
+	speedy_file_set_state(FS_HAVESLOTS);
+
 	/* Run the perl code once */
-	onerun(single_script);
+	exit_val = onerun(single_script);
 
-	/* Tell our file code that its fd is suspect */
-	speedy_file_fd_is_suspect();
-
-	/* See if we should get new options from the perl script */
-	if (SvIV(PERLVAL_OPTS_CHANGED)) {
-#	    ifdef __SUNPRO_C
-		/* Bug in Sun WorkShop 6 2000/04/07 C 5.1 optimizer.
-		 * It was consistently failing shutdown test #4 wwhich calls
-		 * the shutdown_now method.  That method sets MAXRUNS to 1,
-		 * then exits.  For some reason the compiler decided to store
-		 * OPTVAL_MAXRUNS in a register and ignore the fact that
-		 * speedy_opt_set can modify the value.
-		 */
-		OPTREC_MAXRUNS.value = (void*)atoi("100");
-#	    endif
-	    for (i = 0; i < SPEEDY_NUMOPTS; ++i) {
-		OptRec *o = speedy_optdefs + i;
-		SV **svp =
-		    hv_fetch(PERLVAL_OPTS, o->name, o->name_len, 0);
-		if (svp)
-		    (void) speedy_opt_set(o, my_SvPV(*svp));
-	    }
-	    sv_setiv(PERLVAL_OPTS_CHANGED, 0);
-	}
+	/* Send the exit status to the frontend */
+	speedy_file_set_state(FS_CORRUPT);
+	speedy_backend_exited(bslotnum, 0, exit_val);
     }
-    all_done(1);
+    
+    /* Start up a replacement backend */
+    if (speedy_group_lock(gslotnum))
+	speedy_group_start_be(gslotnum);
+
+    /* Exit out */
+    all_done();
+}
+
+int speedy_perl_fork() {
+    dSP;
+    int retval;
+    SV *sv;
+
+    PUSHMARK(SP);
+    sv = newSVpv("fork", sizeof("fork")-1);
+    eval_sv(sv, G_NOARGS);
+
+    SPAGAIN;
+    retval = POPi;
+    PUTBACK;
+
+    SvREFCNT_dec(sv);
+    return retval;
 }
 
 /*

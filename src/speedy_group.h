@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,15 +20,22 @@
 void speedy_group_invalidate(slotnum_t gslotnum);
 void speedy_group_sendsigs(slotnum_t gslotnum);
 void speedy_group_cleanup(slotnum_t gslotnum);
+int speedy_group_connect_locked(slotnum_t gslotnum);
 slotnum_t speedy_group_create();
-slotnum_t speedy_group_findname();
+pid_t speedy_group_be_starting(slotnum_t gslotnum);
+int speedy_group_parent_sig(slotnum_t gslotnum, int sig);
+int speedy_group_start_be(slotnum_t gslotnum);
+int speedy_group_lock(slotnum_t gslotnum);
+
+#define speedy_group_name_match(gslotnum) \
+    (FILE_SLOT(gr_slot, (gslotnum)).name_slot && \
+    !strncmp(FILE_SLOT(grnm_slot, FILE_SLOT(gr_slot, (gslotnum)).name_slot).name, OPTVAL_GROUP, GR_NAMELEN))
 
 #define DOING_SINGLE_SCRIPT \
-    OPTVAL_GROUP[0] == 'n' && \
+    (OPTVAL_GROUP[0] == 'n' && \
     OPTVAL_GROUP[1] == 'o' && \
     OPTVAL_GROUP[2] == 'n' && \
     OPTVAL_GROUP[3] == 'e' && \
-    OPTVAL_GROUP[4] == '\0'
+    OPTVAL_GROUP[4] == '\0')
 
-#define speedy_group_isvalid(gslotnum) \
-    (FILE_SLOT(gr_slot, (gslotnum)).script_head != 0)
+#define speedy_group_isvalid(g) (FILE_SLOT(gr_slot, (g)).script_head != 0)

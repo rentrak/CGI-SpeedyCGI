@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -123,9 +123,7 @@ int speedy_poll_isset(const PollInfo *pi, int fd, int flag) {
 int speedy_poll_wait(PollInfo *pi, int msecs) {
     int retval;
 
-    do {
-	retval = poll_wait(pi, msecs);
-    } while (retval == -1 && errno == EINTR);
+    retval = poll_wait(pi, msecs);
     speedy_util_time_invalidate();
     return retval;
 }

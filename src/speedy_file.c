@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -117,9 +117,18 @@ static void fix_suspect_fd() {
 #define get_stat() \
     if (fstat(file_fd, &file_stat) == -1) speedy_util_die("fstat")
 
-static void remove_file() {
+static void remove_file(int is_corrupt) {
     FILE_HEAD.file_removed = 1;
+#ifdef SPEEDY_DEBUG
+    {
+	/* Keep the file */
+	char newname[100];
+	sprintf(newname, "%s.corrupt.%d", file_name, getpid());
+	rename(file_name, newname);
+    }
+#else
     unlink(file_name);
+#endif
 }
 
 static void str_replace(char **ptr, char *newval) {
@@ -158,6 +167,7 @@ static void file_lock() {
 		open(file_name, O_RDWR | O_CREAT, 0600), PREF_FD_FILE
 	    );
 	    if (file_fd == -1) speedy_util_die("open temp file");
+	    fcntl(file_fd, F_SETFD, FD_CLOEXEC);
 	}
 
 	/* Lock the file */
@@ -185,7 +195,7 @@ static void file_lock() {
 	/* Initialize file's create time if necessary */
 	if (!FILE_HEAD.create_time.tv_sec)
 	    speedy_util_gettimeofday(&(FILE_HEAD.create_time));
-
+	
 	/* Initialize our copy of the create-time if necessary */
 	if (!file_create_time.tv_sec || cur_state < FS_HAVESLOTS) {
 	    file_create_time = FILE_HEAD.create_time;
@@ -194,12 +204,13 @@ static void file_lock() {
 	else if ((file_create_time.tv_sec  != FILE_HEAD.create_time.tv_sec ||
 	          file_create_time.tv_usec != FILE_HEAD.create_time.tv_usec))
 	{
+	    remove_file(1);
 	    DIE_QUIET("temp file is corrupt");
 	}
 
 	/* If file is corrupt (didn't finish all writes), remove it */
 	if (FILE_HEAD.file_corrupt)
-	    remove_file();
+	    remove_file(1);
 
 	/* If file has not been removed then all done */
 	if (!FILE_HEAD.file_removed)
@@ -226,8 +237,8 @@ static void file_close() {
     /* If no groups left, remove the file */
     if (cur_state >= FS_HAVESLOTS) {
 	file_lock();
-	if (!FILE_HEAD.group_head)
-	    remove_file();
+	if (!FILE_HEAD.group_head && !FILE_HEAD.fe_run_head)
+	    remove_file(0);
     }
     file_close2();
 }
@@ -247,12 +258,14 @@ static void switch_state(int new_state) {
     case FS_HAVESLOTS:
 	file_unlock();
 	break;
+#ifdef FS_LOCKED
     case FS_LOCKED:
 	if (!file_locked)
 	    file_lock();
 	FILE_HEAD.file_corrupt = 0;
 	break;
-    case FS_WRITING:
+#endif
+    case FS_CORRUPT:
 	if (!file_locked)
 	    file_lock();
 	FILE_HEAD.file_corrupt = 1;
@@ -260,12 +273,23 @@ static void switch_state(int new_state) {
     }
 }
 
-SPEEDY_INLINE void speedy_file_set_state(int new_state) {
-    if (new_state == cur_state)
-	return;
-    switch_state(new_state);
-    cur_state = new_state;
+SPEEDY_INLINE int speedy_file_set_state(int new_state) {
+    int retval = cur_state;
+
+    if (new_state != cur_state) {
+	switch_state(new_state);
+	cur_state = new_state;
+    }
+    return retval;
 }
+
+#ifdef SPEEDY_BACKEND
+void speedy_file_fork_child() {
+    file_locked = 0;
+    if (cur_state > FS_HAVESLOTS)
+	speedy_file_set_state(FS_HAVESLOTS);
+}
+#endif
 
 #ifdef SPEEDY_BACKEND
 void speedy_file_need_reopen() {

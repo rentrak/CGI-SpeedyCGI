@@ -1,6 +1,6 @@
 
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,10 +20,9 @@
 
 #include "speedy.h"
 
-#define PREFIX_MATCH(s) \
-    (s[0] == 'S' && s[1] == 'P' && s[2] == 'E' && s[3] == 'E' && \
-     s[4] == 'D' && s[5] == 'Y' && s[6] == '_')
-#define PREFIX_LEN	7
+#define PREFIX "SPEEDY_"
+#define PREFIX_LEN (sizeof(PREFIX)-1)
+#define PREFIX_MATCH(s) (strncmp((s), "SPEEDY_", PREFIX_LEN) == 0)
 #define STRLIST_MALLOC	10
 
 /*
@@ -128,37 +127,60 @@ static void cmdline_split(
     StrList *speedy_opts, StrList *script_args
 )
 {
-    StrList split;
-    char **p;
+    int doing_speedy_opts = 0;
 
     /* Arg-0 */
     if (arg0)
 	*arg0 = speedy_util_strdup(*in);
     ++in;
 
-    /* Split on spaces */
-    strlist_init(&split);
-    strlist_split(&split, in);
-    p = strlist_export(&split);
+    for (; *in; ++in) {
+	char **p;
+	StrList split;
 
-    /* Perl args & Speedy options */
-    for (; *p && **p == '-'; ++p) {
-	if (p[0][1] == '-' && p[0][2] == '\0') {
-	    for (++p; *p && **p == '-'; ++p)
-		strlist_append(speedy_opts, *p);
-	    break;
-	} else {
-	    strlist_append(perl_args, *p);
+	/* Split on spaces */
+	{
+	    const char *temp[2];
+
+	    temp[0] = *in;
+	    temp[1] = NULL;
+	    strlist_init(&split);
+	    strlist_split(&split, temp);
+	    p = strlist_export(&split);
 	}
+
+	/*
+	 * If there are no options in this arg, give the whole unsplit
+	 * piece to the script_argv.
+	 */
+	if (!*p || **p != '-') {
+	    strlist_free(&split);
+	    break;
+	}
+
+	/* Perl args & Speedy options */
+	for (; *p && **p == '-'; ++p) {
+	    if (!doing_speedy_opts)
+		if ((doing_speedy_opts = (p[0][1] == '-' && p[0][2] == '\0')))
+		    ++p;
+	    if (*p)
+		strlist_append(doing_speedy_opts ? speedy_opts : perl_args, *p);
+	}
+
+	if (*p) {
+	    ++in;
+	    /* Give the remaining non-options in this arg to the script */
+	    if (script_args)
+		strlist_concat2(script_args, (const char * const *)p);
+	    strlist_free(&split);
+	    break;
+	}
+	strlist_free(&split);
     }
 
-    /* Script argv */
-    if (script_args) {
-	for (; *p; ++p)
-	    strlist_append(script_args, *p);
-    }
-    
-    strlist_free(&split);
+    /* Take the remaining args (without splits) and give to script_args */
+    if (script_args)
+	strlist_concat2(script_args, (const char * const *)in);
 }
 
 

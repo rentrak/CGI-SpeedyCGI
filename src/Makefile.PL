@@ -1,6 +1,5 @@
-
 #
-# Copyright (C) 2001  Daemon Consulting Inc.
+# Copyright (C) 2002  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -27,9 +26,11 @@ use ExtUtils::MakeMaker;
 
 my $gen = join(' ', @src_generated);
 
-open(M, ">Makefile");
-
 my $mm = MM->new({NAME=>'src'});
+
+print "Writing Makefile for src\n";
+
+open(M, ">Makefile");
 
 print M $mm->constants(), $mm->tools_other(), <<END;
 

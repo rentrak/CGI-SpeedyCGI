@@ -17,7 +17,7 @@ sleep 1;
 my $save = $ENV{SPEEDY_BACKENDPROG};
 $ENV{SPEEDY_BACKENDPROG} = '/bin/ls';
 $out = `$ENV{SPEEDY} t/scripts/basic.1 2>&1`;
-$ok = ($? & 255) == 0 && $out =~ /cannot spawn/i;
+$ok = $? != 0 && $out =~ /cannot spawn/i;
 #print STDERR "out=$out status=$?\n";
 print $ok ? "ok\n" : "failed\n";
 $ENV{SPEEDY_BACKENDPROG} = $save;

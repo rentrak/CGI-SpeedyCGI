@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,30 +18,35 @@
  */
 
 typedef struct _CopyBuf {
-    char *buf;
-    int  sz;
-    int  maxsz;
-    int  eof;
-    int  rdfd;
-    int  wrfd;
-    int	 write_err;
+    CircBuf	circ;
+    int		maxsz;
+    int		eof;
+    int		rdfd;
+    int		wrfd;
+    int		write_err;
 } CopyBuf;
 
-#define CANREAD(buf)  ((buf).sz < (buf).maxsz && !(buf).eof && !(buf).write_err)
-#define CANWRITE(buf) ((buf).sz > 0)
-#define COPYDONE(buf) (((buf).eof != 0 && (buf).sz == 0) || (buf).write_err)
+#define speedy_cb_write_err(cb)	((cb)->write_err + 0)
+#define speedy_cb_eof(cb)	((cb)->eof + 0)
+#define speedy_cb_seteof(cb)	do { (cb)->eof = 1;} while (0)
+#define speedy_cb_data_len(cb)	(speedy_circ_data_len(&(cb)->circ))
+#define speedy_cb_free_len(cb)	((cb)->maxsz - speedy_cb_data_len(cb))
+#define speedy_cb_canread(cb)	\
+    (speedy_cb_free_len(cb) && !speedy_cb_eof(cb) && !speedy_cb_write_err(cb))
+#define speedy_cb_canwrite(cb)	\
+    (speedy_cb_data_len(cb) && !speedy_cb_write_err(cb))
+#define speedy_cb_copydone(cb)	\
+    ((speedy_cb_eof(cb) && !speedy_cb_data_len(cb)) || speedy_cb_write_err(cb))
+#define speedy_cb_set_write_err(cb, e) \
+    do {(cb)->write_err = (e);} while (0)
+#define speedy_cb_setfd(cb, r, w) \
+    do { (cb)->rdfd = (r); (cb)->wrfd = (w); } while (0)
+	
 
-#define BUF_FULL(buf)			((buf).sz == (buf).maxsz)
-#define BUF_SZ(buf)			((buf).sz)
-#define BUF_EOF(buf)			((buf).eof)
-#define BUF_SETEOF(buf)			(buf).eof = 1
-#define BUF_SET_WRITE_ERR(buf,e)	(buf).write_err = (e)
-#define BUF_GET_WRITE_ERR(buf)		((buf).write_err)
-
-void speedy_cb_alloc(
-    CopyBuf *bp, int maxsz, int rdfd, int wrfd, char *buf, int sz
+void speedy_cb_init(
+    CopyBuf *cb, int maxsz, int rdfd, int wrfd, const SpeedyBuf *contents
 );
-void speedy_cb_free(CopyBuf *bp);
-void speedy_cb_read(CopyBuf *bp);
-void speedy_cb_write(CopyBuf *bp);
-int speedy_cb_shift(CopyBuf *bp);
+void speedy_cb_free(CopyBuf *cb);
+void speedy_cb_read(CopyBuf *cb);
+void speedy_cb_write(CopyBuf *cb);
+int  speedy_cb_shift(CopyBuf *cb);

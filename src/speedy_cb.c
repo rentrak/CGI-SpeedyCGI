@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,83 +19,102 @@
 
 #include "speedy.h"
 
-/* Copy buffer code */
+#define MIN_READ 1024	/* Need this many bytes free before reading */
 
-void speedy_cb_alloc(
-    CopyBuf *bp, int maxsz, int rdfd, int wrfd, char *buf, int sz
+void speedy_cb_init(
+    CopyBuf *cb, int maxsz, int rdfd, int wrfd, const SpeedyBuf *contents
 )
 {
-    bp->buf		= buf;
-    bp->sz		= sz;
-    bp->maxsz		= maxsz;
-    bp->eof		= 0;
-    bp->rdfd		= rdfd;
-    bp->wrfd		= wrfd;
-    bp->write_err	= 0;
+    speedy_circ_init(&cb->circ, contents);
+
+    cb->maxsz		= maxsz;
+    cb->rdfd		= rdfd;
+    cb->wrfd		= wrfd;
+    cb->write_err	= 0;
+    cb->eof		= 0;
 }
 
-void speedy_cb_free(CopyBuf *bp) {
-    if (bp->buf) {
-	speedy_free(bp->buf);
-	bp->buf = NULL;
+void speedy_cb_free(CopyBuf *cb) {
+    if (speedy_circ_buf(&cb->circ)) {
+	speedy_free(speedy_circ_buf(&cb->circ));
+	speedy_circ_realloc(&cb->circ, NULL, 0);
     }
 }
 
-void speedy_cb_read(CopyBuf *bp) {
-    int n;
+void speedy_cb_read(CopyBuf *cb) {
+    if (speedy_cb_free_len(cb)) {
+	struct iovec iov[2];
+	int n, shortfall = MIN_READ - speedy_circ_free_len(&cb->circ);
 
-    if (!bp->buf) {
-	speedy_new(bp->buf, bp->maxsz, char);
-    }
-    switch(n = read(bp->rdfd, bp->buf + bp->sz, bp->maxsz - bp->sz))
-    {
-    case -1:
-	/* If not ready to read, then all done. */
-	if (SP_NOTREADY(errno))
-	    break;
-	/* Fall through - assume eof if other read errors */
-    case  0:
-	bp->eof = 1;
-	if (bp->sz == 0) {
-	    speedy_cb_free(bp);
+	if (shortfall > 0 && speedy_circ_buf_len(&cb->circ) < cb->maxsz) {
+	    int new_buf_len;
+	    void *buf;
+
+	    /* Enlarge the buffer */
+	    new_buf_len = speedy_circ_buf_len(&cb->circ) +
+			  max(shortfall, speedy_circ_buf_len(&cb->circ));
+	    if (new_buf_len > cb->maxsz)
+		new_buf_len = cb->maxsz;
+
+	    if ((buf = speedy_circ_buf(&cb->circ)))
+		speedy_renew(buf, new_buf_len, char);
+	    else
+		speedy_new(buf, new_buf_len, char);
+
+	    if (buf)
+		speedy_circ_realloc(&cb->circ, buf, new_buf_len);
 	}
-	break;
-    default:
-	bp->sz += n;
-	break;
+
+	switch(n = readv(cb->rdfd, iov, speedy_circ_free_segs(&cb->circ, iov)))
+	{
+	case -1:
+	    /* If not ready to read, then all done. */
+	    if (SP_NOTREADY(errno))
+		return;
+	    /* Fall through - assume eof if other read errors */
+	case  0:
+	    cb->eof = 1;
+	    if (!speedy_cb_data_len(cb))
+		speedy_cb_free(cb);
+	    return;
+	default:
+	    speedy_circ_adj_len(&cb->circ, n);
+	    break;
+	}
     }
 }
 
-SPEEDY_INLINE static void cb_shift(CopyBuf *bp, int n) {
-    bp->sz -= n;
-    if (bp->sz)
-	speedy_memmove(bp->buf, bp->buf + n, bp->sz);
-}
-
-void speedy_cb_write(CopyBuf *bp) {
+void speedy_cb_write(CopyBuf *cb) {
     int n;
 
-    if (!bp->write_err) {
-	n = write(bp->wrfd, bp->buf, bp->sz);
+    if (!cb->write_err) {
+	struct iovec iov[2];
+
+	n = writev(cb->wrfd, iov, speedy_circ_data_segs(&cb->circ, iov));
 
 	/* If any error other than EAGAIN, then write error */
 	if (n == -1 && !SP_NOTREADY(errno))
-	    BUF_SET_WRITE_ERR(*bp, errno ? errno : EIO);
+	    speedy_cb_set_write_err(cb, errno ? errno : EIO);
     }
 
-    /* If error then pretend we did the write */
-    if (bp->write_err) 
-	n = bp->sz;
+    /* If error (now or prior) then pretend we did the write */
+    if (cb->write_err) 
+	n = speedy_cb_data_len(cb);
 
     if (n > 0) {
-	cb_shift(bp, n);
-	if (bp->eof && !bp->sz)
-	    speedy_cb_free(bp);
+	speedy_circ_adj_len(&cb->circ, -n);
+	if (cb->eof && !speedy_cb_data_len(cb))
+	    speedy_cb_free(cb);
     }
 }
 
-int speedy_cb_shift(CopyBuf *bp) {
-    int retval = (bp->buf)[0];
-    cb_shift(bp, 1);
-    return retval;
+int speedy_cb_shift(CopyBuf *cb) {
+    if (speedy_cb_data_len(cb)) {
+	struct iovec iov[2];
+
+	(void) speedy_circ_data_segs(&cb->circ, iov);
+	speedy_circ_adj_len(&cb->circ, -1);
+	return ((char *)iov[0].iov_base)[0];
+    }
+    return -1;
 }

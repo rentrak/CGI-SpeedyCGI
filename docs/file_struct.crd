@@ -96,7 +96,7 @@ ClassNode 138683512
 
 Comment 138821745
 {
-	{ Name "Copyright (C) 2001\rDaemon Consulting, Inc" }
+	{ Name "Copyright (C) 2002\r Sam Horrocks" }
 	{ Annotation "" }
 	{ Parent 0 }
 	{ Index "" }

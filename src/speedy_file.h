@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,8 +20,11 @@
 typedef struct _file_head {
     struct timeval	create_time;
     slotnum_t		group_head;
+    slotnum_t		group_tail;
     slotnum_t		slot_free;
     slotnum_t		slots_alloced;
+    slotnum_t		fe_run_head;
+    slotnum_t		fe_run_tail;
     unsigned char	file_corrupt;
     unsigned char	file_removed;
 } file_head_t;
@@ -32,22 +35,22 @@ typedef struct _file {
 } speedy_file_t;
 
 #define FILE_ALLOC_CHUNK	512
-#define FILE_REV		3
+#define FILE_REV		5
 #define FILE_HEAD		(speedy_file_maddr->file_head)
 #define FILE_SLOTS		(speedy_file_maddr->slots)
-#define FILE_SLOT(member, n)	(FILE_SLOTS[SLOT_CHECK(n)-1].member)
+#define FILE_SLOT(member, n)	(FILE_SLOTS[SLOT_CHECK(n)-1].slot_u.member)
 #define MIN_SLOTS_FREE		5
 
 /* File access states */
 #define FS_CLOSED	0	/* File is closed, not mapped */
-#define FS_OPEN		1	/* Keep open for performance only */
-#define FS_HAVESLOTS	2	/* Keep open - we are holding onto slots in
+#define FS_OPEN		1	/* Unlocked.  Keep open for performance only */
+#define FS_HAVESLOTS	2	/* Unlocked.  We are holding onto slots in 
 				   this file */
-#define FS_LOCKED	3	/* Locked, mmaped, read-only */
-#define FS_WRITING	4	/* Locked, mmaped, writing to file */
+#define FS_CORRUPT	3	/* Locked, mmaped, non-atomic writes to file */
 
 extern speedy_file_t *speedy_file_maddr;
 SPEEDY_INLINE void speedy_file_fd_is_suspect();
 int speedy_file_size();
-SPEEDY_INLINE void speedy_file_set_state(int new_state);
+SPEEDY_INLINE int speedy_file_set_state(int new_state);
 void speedy_file_need_reopen();
+void speedy_file_fork_child();

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,11 +18,17 @@
  */
 
 void speedy_backend_dispose(slotnum_t gslotnum, slotnum_t bslotnum);
-void speedy_backend_kill(slotnum_t gslotnum, slotnum_t bslotnum);
-slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum);
+slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum, slotnum_t fslotnum);
 void speedy_backend_be_wait_put(slotnum_t gslotnum, slotnum_t bslotnum);
-void speedy_backend_kill(slotnum_t gslotnum, slotnum_t bslotnum);
-void speedy_backend_check(slotnum_t gslotnum, slotnum_t bslotnum);
-void speedy_backend_check_next(slotnum_t gslotnum, slotnum_t bslotnum);
 slotnum_t speedy_backend_create_slot(slotnum_t gslotnum);
-void speedy_backend_kill_idle(slotnum_t gslotnum);
+void speedy_backend_remove_be_wait(slotnum_t gslotnum);
+int speedy_backend_below_maxbe(slotnum_t gslotnum);
+void speedy_backend_exited(slotnum_t bslotnum, int exit_on_sig, int exit_val);
+
+#define speedy_backend_alive(b) \
+	(speedy_util_kill(FILE_SLOT(be_slot, (b)).pid, 0) != -1)
+
+#define speedy_backend_dead(b) (!speedy_backend_alive(b))
+
+/* Backend is dead, simulate sigkill */
+#define speedy_backend_died(b) speedy_backend_exited((b),1,SIGKILL)

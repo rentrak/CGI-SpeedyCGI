@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,8 +25,8 @@
 #define speedy_memmove(d,s,n)	memmove(d,s,n)
 #define speedy_bzero(s,n)	memset(s,'\0',n)
 #define speedy_free(s)		free(s)
-#define speedy_new(s,n,t)	((s) = (t*)malloc((n)*sizeof(t)))
-#define speedy_renew(s,n,t)	((s) = (t*)realloc((s),(n)*sizeof(t)))
+#define speedy_new(s,n,t)	do {(s) = (t*)malloc((n)*sizeof(t));} while (0)
+#define speedy_renew(s,n,t)	do {(s) = (t*)realloc((s),(n)*sizeof(t));} while (0)
 #define speedy_execvp(f,a)	execvp(f,(char *const*)a)
 
 void speedy_abort(const char *s);

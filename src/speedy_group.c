@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,51 +19,68 @@
 
 #include "speedy.h"
 
-static void remove_scripts(gr_slot_t *gslot) {
-    slotnum_t snum, next;
-
-    for (snum = gslot->script_head; snum; snum = next) {
-	next = FILE_SLOT(scr_slot, snum).next_slot;
-	speedy_slot_free(snum);
-    }
-    gslot->script_head = 0;
-}
-
 void speedy_group_invalidate(slotnum_t gslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
 
+    /* Don't invalidate twice */
+    if (!speedy_group_isvalid(gslotnum))
+	return;
+
     /* Remove scripts from the script list */
-    remove_scripts(gslot);
+    {
+	slotnum_t snum, next;
+
+	for (snum = gslot->script_head; snum; snum = next) {
+	    next = speedy_slot_next(snum);
+	    SLOT_FREE(snum, "script (speedy_group_invalidate)");
+	}
+	gslot->script_head = 0;
+    }
 
     /* Remove the group name if any */
-    if (gslot->name) {
-	speedy_slot_free(gslot->name);
-	gslot->name = 0;
+    if (gslot->name_slot) {
+	SLOT_FREE(gslot->name_slot, "name (speedy_group_invalidate)");
+	gslot->name_slot = 0;
     }
+
+    /* Remove backends from the be_wait queue */
+    speedy_backend_remove_be_wait(gslotnum);
+
+    /* Move this group to the tail of the group list */
+    speedy_slot_move_tail(gslotnum,
+	&(FILE_HEAD.group_head), &(FILE_HEAD.group_tail));
+}
+
+pid_t speedy_group_be_starting(slotnum_t gslotnum) {
+    gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
+    pid_t be_pid = gslot->be_starting;
+
+    if (be_pid) {
+	if (speedy_util_kill(be_pid, 0) != -1)
+	    return be_pid;
+	gslot->be_starting = 0;
+    }
+    return 0;
 }
 
 void speedy_group_sendsigs(slotnum_t gslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
     slotnum_t fslotnum, bslotnum;
-    be_slot_t *bslot;
-    fe_slot_t *fslot;
 
-    /* Get first slot in the fe_wait list */
-    fslotnum = gslot->fe_wait;
+    /* Get first slot in the fe list */
+    fslotnum = gslot->fe_head;
 
     /* Loop over each backend slot in the wait list */
-    for (bslotnum = gslot->be_wait;
-         bslotnum && fslotnum;
-         bslotnum = bslot->next_slot)
+    for (bslotnum = gslot->be_head;
+	 bslotnum && fslotnum && !FILE_SLOT(be_slot, bslotnum).fe_running;
+         bslotnum = speedy_slot_next(bslotnum))
     {
-	slotnum_t next_slot;
+	slotnum_t next;
 
-	bslot = &FILE_SLOT(be_slot, bslotnum);
-
-	for (; fslotnum; fslotnum = next_slot) {
+	for (; fslotnum; fslotnum = next) {
 	    /* Get next FE */
-	    fslot = &FILE_SLOT(fe_slot, fslotnum);
-	    next_slot = fslot->next_slot;
+	    fe_slot_t *fslot = &FILE_SLOT(fe_slot, fslotnum);
+	    next = speedy_slot_next(fslotnum);
 
 	    /* If it's not us send an ALRM signal */
 	    if (speedy_util_kill(fslot->pid, SIGALRM) != -1) {
@@ -74,71 +91,74 @@ void speedy_group_sendsigs(slotnum_t gslotnum) {
 	    /* Failed, remove this FE and try again */
 	    speedy_frontend_dispose(gslotnum, fslotnum);
 	}
-    }
-}
 
-static void remove_group(slotnum_t *ptr, slotnum_t gslotnum) {
-    while (*ptr != gslotnum && *ptr) {
-	ptr = &(FILE_SLOT(gr_slot, *ptr).next_slot);
+	/* Only wake up one FE at a time.. */
+	break;
     }
-    if (*ptr)
-	*ptr = SLOT_CHECK(FILE_SLOT(gr_slot, gslotnum).next_slot);
 }
 
 /* Cleanup this group after an fe/be has been removed */
 void speedy_group_cleanup(slotnum_t gslotnum) {
-    gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
 
     /* No cleanup if there are still be's or fe's */
-    if (!gslot->be_head && !gslot->fe_wait) {
-	speedy_group_invalidate(gslotnum);
-	remove_group(&(FILE_HEAD.group_head), gslotnum);
-	speedy_slot_free(gslotnum);
+    if (FILE_SLOT(gr_slot, gslotnum).be_head ||
+        FILE_SLOT(gr_slot, gslotnum).fe_head)
+    {
+	return;
     }
+
+    /* Kill the parent */
+    speedy_util_kill(FILE_SLOT(gr_slot, gslotnum).be_parent, SIGKILL);
+
+    /* Invalidate - cleans up resources belonging to the group */
+    speedy_group_invalidate(gslotnum);
+
+    /* Remove our group from the list */
+    speedy_slot_remove(gslotnum, &(FILE_HEAD.group_head), &(FILE_HEAD.group_tail));
+
+    SLOT_FREE(gslotnum, "group (speedy_group_cleanup)");
 }
 
 slotnum_t speedy_group_create() {
     slotnum_t gslotnum;
-    gr_slot_t *gslot;
 
-    gslotnum = speedy_slot_alloc();
-    gslot = &FILE_SLOT(gr_slot, gslotnum);
-    gslot->be_head = gslot->be_wait = gslot->fe_wait =
-	gslot->fe_tail = gslot->script_head = 0;
-    gslot->next_slot = FILE_HEAD.group_head;
-    FILE_HEAD.group_head = SLOT_CHECK(gslotnum);
+    gslotnum = SLOT_ALLOC("group (speedy_group_create)");
 
-    if (DOING_SINGLE_SCRIPT) {
-	gslot->name = 0;
-    } else {
-	slotnum_t nslotnum;
+    speedy_slot_insert(gslotnum, &(FILE_HEAD.group_head), &(FILE_HEAD.group_tail));
 
-	gslot->name = nslotnum = speedy_slot_alloc();
+    if (!DOING_SINGLE_SCRIPT) {
+	register slotnum_t nslotnum;
+
+	nslotnum = SLOT_ALLOC("name (speedy_group_create)");
+	FILE_SLOT(gr_slot, gslotnum).name_slot = nslotnum;
 	strncpy(FILE_SLOT(grnm_slot, nslotnum).name, OPTVAL_GROUP, GR_NAMELEN);
     }
     return gslotnum;
 }
 
-slotnum_t speedy_group_findname() {
-    slotnum_t gslotnum;
-    gr_slot_t *gslot;
 
-    if (DOING_SINGLE_SCRIPT)
+int speedy_group_parent_sig(slotnum_t gslotnum, int sig) {
+    gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
+
+    if (speedy_util_kill(gslot->be_parent, sig) == -1) {
+	speedy_group_invalidate(gslotnum);
+	gslot->be_parent = 0;
 	return 0;
-
-    /* Need to find our group by name... */
-    for (gslotnum = FILE_HEAD.group_head; gslotnum; gslotnum = gslot->next_slot)
-    {
-	slotnum_t nslotnum;
-
-	gslot = &FILE_SLOT(gr_slot, gslotnum);
-
-	if ((nslotnum = gslot->name) && speedy_group_isvalid(gslotnum) &&
-	    strncmp(FILE_SLOT(grnm_slot, nslotnum).name,
-		OPTVAL_GROUP, GR_NAMELEN) == 0)
-	{
-	    break;
-	}
     }
-    return gslotnum;
+    return 1;
+}
+
+int speedy_group_start_be(slotnum_t gslotnum) {
+    gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
+
+    /* If the parent is still starting up, then consider it signalled */
+    if (gslot->be_parent && gslot->be_parent == gslot->be_starting)
+	return 1;
+    
+    return speedy_group_parent_sig(gslotnum, SIGUSR1);
+}
+
+int speedy_group_lock(slotnum_t gslotnum) {
+    speedy_file_set_state(FS_CORRUPT);
+    return speedy_group_isvalid(gslotnum);
 }

@@ -1,6 +1,6 @@
 <HTML>
 <HEAD>
-<TITLE>CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently</TITLE>
+<TITLE>SpeedyCGI - Speed up perl scripts by running them persistently</TITLE>
 <LINK REV="made" HREF="mailto:root@porky.devel.redhat.com">
 </HEAD>
 
@@ -34,6 +34,7 @@
 	</UL>
 
 	<LI><A HREF="#FREQUENTLY_ASKED_QUESTIONS">FREQUENTLY ASKED QUESTIONS</A>
+	<LI><A HREF="#USING_GROUPS">USING GROUPS</A>
 	<LI><A HREF="#DOWNLOADING">DOWNLOADING</A>
 	<UL>
 
@@ -42,6 +43,11 @@
 	</UL>
 
 	<LI><A HREF="#AUTHOR">AUTHOR</A>
+	<UL>
+
+		<LI><A HREF="#Contributors">Contributors</A>
+	</UL>
+
 	<LI><A HREF="#SEE_ALSO">SEE ALSO</A>
 	<LI><A HREF="#MORE_INFORMATION">MORE INFORMATION</A>
 	<UL>
@@ -53,6 +59,7 @@
 		<LI><A HREF="#Benchmarks">Benchmarks</A>
 		<LI><A HREF="#Success_Stories">Success Stories</A>
 		<LI><A HREF="#Revision_History">Revision History</A>
+		<LI><A HREF="#YAPC_2001_Presentation">YAPC 2001 Presentation</A>
 	</UL>
 
 	<LI><A HREF="#COPYRIGHT">COPYRIGHT</A>
@@ -63,7 +70,7 @@
 <P>
 <H1><A NAME="NAME">NAME</A></H1>
 <P>
-CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
+SpeedyCGI - Speed up perl scripts by running them persistently
 
 <P>
 <HR>
@@ -72,7 +79,7 @@ CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 <PRE> #!/usr/bin/speedy
 </PRE>
 <P>
-<PRE> ### Your CGI Script Here
+<PRE> ### Your Script Here
  print &quot;Content-type: text/html\n\nHello World!\n&quot;;
 </PRE>
 <P>
@@ -106,8 +113,8 @@ CGI::SpeedyCGI - Speed up perl CGI scripts by running them persistently
 <HR>
 <H1><A NAME="DESCRIPTION">DESCRIPTION</A></H1>
 <P>
-SpeedyCGI is a way to run CGI perl scripts persistently, which usually
-makes them run much more quickly. A script can be converted to SpeedyCGI by
+SpeedyCGI is a way to run perl scripts persistently, which can make them
+run much more quickly. A script can be made to to run persistently by
 changing the interpreter line at the top of the script from:
 
 <P>
@@ -120,23 +127,24 @@ to
 <PRE>    #!/usr/bin/speedy
 </PRE>
 <P>
-After the script is initially run, instead of exiting, SpeedyCGI keeps the
-perl interpreter running. During subsequent runs, this interpreter is used
-to handle new requests instead of starting a new perl interpreter for each
-execution.
+After the script is initially run, instead of exiting, the perl interpreter
+is kept running. During subsequent runs, this interpreter is used to handle
+new executions instead of starting a new perl interpreter each time. A very
+fast frontend program, written in C, is executed for each request. This
+fast frontend then contacts the persistent Perl process, which is usually
+already running, to do the work and return the results.
 
 <P>
-SpeedyCGI conforms to the CGI specification, and normally does not work
-inside the web server. A very fast cgi-bin, written in C, is executed for
-each request. This fast cgi-bin then contacts the persistent Perl process,
-which is usually already running, to do the work and return the results.
+By default each perl script runs in its own Unix process, so one perl
+script can't interfere with another. Command line options can also be used
+to deal with programs that have memory leaks or other problems that might
+keep them from otherwise running persistently.
 
 <P>
-Since the perl interpreter runs outside the web server, it can't cause
-problems for the web server itself. By default each perl script runs in its
-own Unix process, so one program can't interfere with another. Command line
-options can also be used to deal with programs that have memory leaks or
-other problems that might keep them from otherwise running persistently.
+SpeedyCGI can be used to speed up perl CGI scripts. It conforms to the CGI
+specification, and does not run perl code inside the web server. Since the
+perl interpreter runs outside the web server, it can't cause problems for
+the web server itself.
 
 <P>
 SpeedyCGI also provides an Apache module so that under the Apache web
@@ -231,7 +239,7 @@ methods.
 <DT><STRONG><A NAME="item_BackendProg">BackendProg</A></STRONG><DD>
 <P>
 <PRE>    Command Line    : -p&lt;string&gt;
-    Default Value   : &quot;/usr/local/bin/speedy_backend&quot;
+    Default Value   : &quot;/usr/bin/speedy_backend&quot;
     Context         : mod_speedycgi, speedy
 </PRE>
 <P>
@@ -243,28 +251,28 @@ methods.
 <DT><STRONG><A NAME="item_BufsizGet">BufsizGet</A></STRONG><DD>
 <P>
 <PRE>    Command Line    : -B&lt;number&gt;
-    Default Value   : 8192
+    Default Value   : 131072
     Context         : speedy
 </PRE>
 <P>
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use &lt;number&gt; bytes for the buffer that receives data from
-        the CGI script.
+<PRE>        Use &lt;number&gt; bytes as the maximum size for the buffer that
+        receives data from the perl backend.
 </PRE>
 <DT><STRONG><A NAME="item_BufsizPost">BufsizPost</A></STRONG><DD>
 <P>
 <PRE>    Command Line    : -b&lt;number&gt;
-    Default Value   : 1024
+    Default Value   : 131072
     Context         : speedy
 </PRE>
 <P>
 <PRE>    Description:
 </PRE>
 <P>
-<PRE>        Use &lt;number&gt; bytes for the buffer that sends data to the
-        CGI script.
+<PRE>        Use &lt;number&gt; bytes as the maximum size for the buffer that
+        sends data to the perl backend.
 </PRE>
 <DT><STRONG><A NAME="item_Group">Group</A></STRONG><DD>
 <P>
@@ -299,7 +307,7 @@ methods.
 </PRE>
 <P>
 <PRE>        If non-zero, limits the number of speedy backends running
-        for this cgi script to &lt;number&gt;.
+        for this perl script to &lt;number&gt;.
 </PRE>
 <DT><STRONG><A NAME="item_MaxRuns">MaxRuns</A></STRONG><DD>
 <P>
@@ -411,7 +419,7 @@ Deprecated. Similar to <A HREF="#item_add_shutdown_handler">add_shutdown_handler
 <DT><STRONG><A NAME="item_i_am_speedy">i_am_speedy</A></STRONG><DD>
 <P>
 Returns a boolean telling whether this script is running under SpeedyCGI or
-not. A CGI script can run under regular perl, or under SpeedyCGI. This
+not. A perl script can run under regular perl, or under SpeedyCGI. This
 method allows the script to tell which environment it is in.
 
 <P>
@@ -532,15 +540,37 @@ mod_speedycgi module if you have the command <STRONG>apxs</STRONG> in your path.
 <HR>
 <H2><A NAME="Install_in_a_Different_Directory">Install in a Different Directory</A></H2>
 <P>
-To install in a different directory, change the first line in
-<A HREF="#Standard_Install">Standard Install</A> to:
+If you don't have permission to install into the standard perl directory,
+or if you want to install elsewhere, the easiest way is to compile and
+install your own copy of perl in another location, then use your new
+version of perl when you run ``perl Makefile.PL''. The SpeedyCGI binaries
+and module will then be installed in the same location as the new version
+of perl.
 
 <P>
-<PRE>    perl Makefile.PL PREFIX=/somewhere
-</PRE>
-<P>
-This will install the binaries in <EM>/somewhere/bin</EM> and the SpeedyCGI.pm module under <EM>/somewhere/lib</EM>.
+If you can't install your own perl, you can take the following steps:
 
+<UL>
+<LI>
+<P>
+Edit src/optdefs and change the default value for BackendProg to the
+location where speedy_backend will be installed.
+
+</UL>
+<UL>
+<LI>
+<P>
+Compile as above, then manually copy the speedy and speedy_backend binaries
+to where you want to install them.
+
+</UL>
+<UL>
+<LI>
+<P>
+If you want to use the CGI::SpeedyCGI module in your code (it's not
+required), you will have to use ``use lib'' so it can be located.
+
+</UL>
 <P>
 <HR>
 <H2><A NAME="Apache_Installation">Apache Installation</A></H2>
@@ -555,8 +585,9 @@ If the apache installation fails:
 <UL>
 <LI>
 <P>
-Copy the mod_speedycgi.so from the mod_speedycgi directory to wherever your
-apache modules are stored (try <EM>/usr/lib/apache</EM>)
+Copy the mod_speedycgi.so from the mod_speedycgi directory, or from the
+mod_speedycgi2/.libs directory, to wherever your apache modules are stored
+(try <EM>/usr/lib/apache</EM>)
 
 </UL>
 <UL>
@@ -568,7 +599,12 @@ LoadModules to see.
 
 <P>
 <PRE>    LoadModule speedycgi_module modules/mod_speedycgi.so
-    AddModule mod_speedycgi.c
+</PRE>
+<P>
+If you are using Apache-1, also add:
+
+<P>
+<PRE>    AddModule mod_speedycgi.c
 </PRE>
 </UL>
 <P>
@@ -622,22 +658,22 @@ handled by SpeedyCGI.
 <P>
 Via a Unix socket in <EM>/tmp</EM>. A queue is kept in a shared file in <EM>/tmp</EM>
 that holds an entry for each process. In that queue are the pids of the
-perl processes waiting for connections. The CGI frontend pulls a process
-out of this queue, connects to its socket, sends over the environment and
-argv, and then uses this socket for stdin/stdout to the perl process.
+perl processes waiting for connections. The frontend pulls a process out of
+this queue, connects to its socket, sends over the environment and argv,
+and then uses this socket for stdin/stdout to the perl process.
 
 </DL>
 <DL>
-<DT><STRONG><A NAME="item_If">If another request comes in while a CGI is running, does the client
+<DT><STRONG><A NAME="item_If">If another request comes in while SpeedyCGI script is running, does the client
 have to wait or is another process started?  Is there a way to set a limit
 on how many processes get started?</A></STRONG><DD>
 <P>
 If another request comes while all the perl processes are busy, then
-another perl process is started. Just like in CGI there is normally no
-limit on how many processes get started. But, the processes are only
-started when the load is so high that they're necessary. If the load goes
-down, the processes will die off due to inactivity, unless you disable the
-timeout.
+another perl process is started. Just like in regular perl there is
+normally no limit on how many processes get started. But, the processes are
+only started when the load is so high that they're necessary. If the load
+goes down, the processes will die off due to inactivity, unless you disable
+the timeout.
 
 <P>
 Starting in version 1.8.3 an option was added to limit the number of perl
@@ -650,8 +686,8 @@ above.
 Do globals keep their values?  Are destructors run after the request?</STRONG><DD>
 <P>
 Globals keep their values. Nothing is destroyed after the request.
-STDIN/STDOUT/STDERR are closed -- other files are not.  <CODE>%ENV</CODE>, <CODE>@ARGV</CODE>, and
-<CODE>%SIG</CODE> are the only globals changed between requests.
+STDIN/STDOUT/STDERR are closed -- other files are not.  <CODE>%ENV</CODE> and <CODE>@ARGV</CODE>
+are the only globals changed between requests.
 
 </DL>
 <DL>
@@ -695,11 +731,11 @@ thing applies to speedycgi:
 <P>
 If all else fails you can disable persistence by setting MaxRuns to 1. The
 only benefit of this over normal perl is that speedy will pre-compile your
-script between requests.
+script.
 
 </DL>
 <DL>
-<DT><STRONG>How do I keep a persistent connect to a database?</STRONG><DD>
+<DT><STRONG>How do I keep a persistent connection to a database?</STRONG><DD>
 <P>
 Since globals retain their values between runs, the best way to do this is
 to store the connection in a global variable, then check on each run to see
@@ -734,6 +770,113 @@ working, you can use code like this:
     }
 </PRE>
 </DL>
+<DL>
+<DT><STRONG><A NAME="item_Why">Why do scripts with persistent Oracle database connections hang?</A></STRONG><DD>
+<P>
+When using an IPC connection to Oracle, an oracle process is fork'ed and
+exec'ed and keeps the stdout connection open, so that the web server never
+gets an EOF. To fix the problem, either switch to using a TCP connection to
+the database, or add the following perl code somewhere before the
+DBI-&gt;connect statement:
+
+<P>
+<PRE>    use Fcntl;
+    fcntl(STDOUT, F_SETFD, FD_CLOEXEC);
+</PRE>
+<P>
+This will set the close-on-exec flag on standard out so it is closed when
+oracle is exec'ed.
+
+</DL>
+<P>
+<HR>
+<H1><A NAME="USING_GROUPS">USING GROUPS</A></H1>
+<P>
+The group feature in SpeedyCGI can be used to help reduce the amount of
+memory used by the perl interpreters. When groups are not used (ie when
+group name is ``none''), each perl script is given its own set of perl
+interpreters, separate from the perl interpreters used for other scripts.
+In SpeedyCGI each perl interpreter is also a separate unix process.
+
+<P>
+When grouping is used, perl interpreters are put into a group. All perl
+interpreters in that group can run perl scripts in that same group. What
+this means is that by putting all your scripts into one group, there could
+be one perl interpreter running all the perl scripts on your system. This
+can greatly reduce your memory needs when running lots of different perl
+scripts.
+
+<P>
+SpeedyCGI group names are entities unto themselves. They are not associated
+with Unix groups, or with the Group directive in Apache. Group names are
+created by the person running SpeedyCGI based on their needs. There are two
+special group names ``none'' and ``default''. All other group names are
+created by the user of SpeedyCGI using the Group option described in <A HREF="#OPTIONS">OPTIONS</A>.
+
+<P>
+If you want to use the maximum amount of grouping possible (ie all scripts
+in the same interpreter), then you should always use the group name
+``default''. When you do this, you will get the fewest number of perl
+interpreters possible. Each perl interpreter will be able to run any of
+your perl scripts.
+
+<P>
+Although using group ``default'' for all scripts results in the most
+efficient use of resources, it's not always possible or desirable to do
+this. You may want to use other group names for the following reasons:
+
+<UL>
+<LI><STRONG><A NAME="item_To">To isolate misbehaving scripts, or scripts that don't work in groups.</A></STRONG>
+<P>
+Some scripts cannot work in groups. When perl scripts are grouped together
+they are each given their own unique package name - they are not run out of
+the ``main'' package as they normally would be. So, for example, a script
+that explicitly uses ``main'' somewhere in its code to find its subroutines
+or variables probably won't work in groups. In this case, it's probably
+best to run such a script with group ``none'', so it is compiled and run
+out of package main, and always given its own interpreter.
+
+<P>
+Other scripts may make changes to included packages, etc, that may break
+other scripts running in the same interpreter. In this case such scripts
+can be given their own group name (like group name ``pariah'') to keep them
+away from other scripts that they are incompatible with. The rest of your
+scripts can then run out of group ``default''. This will ensure that the
+``pariah'' scripts won't run within the same interpreter as your other
+scripts.
+
+</UL>
+<UL>
+<LI><STRONG><A NAME="item_To">To pass different perl or SpeedyCGI parameters to different scripts.</A></STRONG>
+<P>
+The first script to start up in a group sets the perl and SpeedyCGI
+parameters used from then on for all scripts in that group. You may want to
+use separate groups to create separate policies for different scripts.
+
+<P>
+Say you have an email application that contains ten perl scripts, and since
+the common perl code used in this application has a bad memory leak, you
+want to user a MaxRuns setting of 5 for all of these scripts. You then want
+all your other scripts to run in a separate group with a normal MaxRuns
+policy. What you can do is edit the ten email scripts, and at the top, put
+in the line:
+
+<P>
+<PRE>    #!/usr/bin/speedy -- -gmail -r5
+</PRE>
+<P>
+In the rest of your perl scripts you can use:
+
+<P>
+<PRE>    #!/usr/bin/speedy -- -g
+</PRE>
+<P>
+What this will do is put the ten email scripts into a group of their own
+(named ``mail'') and give them all the default MaxRuns value of 5. All
+other scripts will be put into the group named ``default'', and this group
+will have the normal MaxRuns setting.
+
+</UL>
 <P>
 <HR>
 <H1><A NAME="DOWNLOADING">DOWNLOADING</A></H1>
@@ -744,18 +887,8 @@ working, you can use code like this:
 Binaries for many OSes can be found at:
 
 <P>
-<PRE>    <A HREF="http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries/">http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/binaries/</A>
+<PRE>    <A HREF="http://daemoninc.com/SpeedyCGI/download.html">http://daemoninc.com/SpeedyCGI/download.html</A>
 </PRE>
-<P>
-There are also some older debian packages available from:
-
-<P>
-<PRE>    <A HREF="http://www.debian.org/Packages/stable/interpreters/speedy-cgi-perl.html">http://www.debian.org/Packages/stable/interpreters/speedy-cgi-perl.html</A>
-    <A HREF="http://www.debian.org/Packages/unstable/web/libapache-mod-speedycgi.html">http://www.debian.org/Packages/unstable/web/libapache-mod-speedycgi.html</A>
-</PRE>
-<P>
-The debian packages are not based on the latest version of SpeedyCGI.
-
 <P>
 <HR>
 <H2><A NAME="Source_Code">Source Code</A></H2>
@@ -772,8 +905,8 @@ The latest development code can be obtained from the SourceForge CVS
 repository using the following commands:
 
 <P>
-<PRE> cvs -d:pserver:anonymous@cvs.SpeedyCGI.sourceforge.net:/cvsroot/SpeedyCGI login 
- cvs -z3 -d:pserver:anonymous@cvs.SpeedyCGI.sourceforge.net:/cvsroot/SpeedyCGI co 2.x
+<PRE> cvs -d:pserver:anonymous@cvs.SpeedyCGI.sourceforge.net:/cvsroot/speedycgi login 
+ cvs -z3 -d:pserver:anonymous@cvs.SpeedyCGI.sourceforge.net:/cvsroot/speedycgi co 2.x
 </PRE>
 <P>
 Press Enter when prompted for a password.
@@ -783,10 +916,58 @@ Press Enter when prompted for a password.
 <H1><A NAME="AUTHOR">AUTHOR</A></H1>
 <P>
 <PRE>    Sam Horrocks
-    Daemon Consulting Inc.
     <A HREF="http://daemoninc.com">http://daemoninc.com</A>
     sam@daemoninc.com
 </PRE>
+<P>
+<HR>
+<H2><A NAME="Contributors">Contributors</A></H2>
+<P>
+A lot of people have helped out with code, patches, ideas, resources, etc.
+I'm sure I'm missing someone here - if so, please drop me an email.
+
+<UL>
+<LI>
+<P>
+Gunther Birznieks
+
+<LI>
+<P>
+Diana Eichert
+
+<LI>
+<P>
+Takanori Kawai
+
+<LI>
+<P>
+Robert Klep
+
+<LI>
+<P>
+Marc Lehmann
+
+<LI>
+<P>
+James McGregor
+
+<LI>
+<P>
+Josh Rabinowitz
+
+<LI>
+<P>
+Dave Parker
+
+<LI>
+<P>
+Craig Sanders
+
+<LI>
+<P>
+Joseph Wang
+
+</UL>
 <P>
 <HR>
 <H1><A NAME="SEE_ALSO">SEE ALSO</A></H1>
@@ -806,26 +987,34 @@ HREF="http://daemoninc.com/SpeedyCGI/">http://daemoninc.com/SpeedyCGI/</A>
 <P>
 <HR>
 <H2><A NAME="Mailing_List">Mailing List</A></H2>
+<UL>
+<LI>
 <P>
-The mailing list address is <A
-HREF="mailto:speedycgi@newlug.org.">speedycgi@newlug.org.</A> Subscribe by
-sending a message to <A
-HREF="mailto:speedycgi-request@newlug.org">speedycgi-request@newlug.org</A>
-with the word ``subscribe'' in the body. An archive of the mailing list is
-at <A
-HREF="http://newlug.org/mailArchive/speedycgi/">http://newlug.org/mailArchive/speedycgi/</A>
-and mirrored at <A
-HREF="http://daemoninc.com/SpeedyCGI/mailArchive/.">http://daemoninc.com/SpeedyCGI/mailArchive/.</A>
-There is also a search interface at <A
-HREF="http://daemoninc.com/SpeedyCGI/search_mail.html">http://daemoninc.com/SpeedyCGI/search_mail.html</A>
+SpeedyCGI users mailing list - <A
+HREF="mailto:speedycgi-users@lists.sourceforge.net.">speedycgi-users@lists.sourceforge.net.</A>
+Archives and subscription information are at <A
+HREF="http://lists.sourceforge.net/lists/listinfo/speedycgi-users">http://lists.sourceforge.net/lists/listinfo/speedycgi-users</A>
 
 
+</UL>
+<UL>
+<LI>
+<P>
+SpeedyCGI announcements mailing list - <A
+HREF="mailto:speedycgi-announce@lists.sourceforge.net.">speedycgi-announce@lists.sourceforge.net.</A>
+Archives and subscription information are at <A
+HREF="http://lists.sourceforge.net/lists/listinfo/speedycgi-announce">http://lists.sourceforge.net/lists/listinfo/speedycgi-announce</A>
+
+
+</UL>
 <P>
 <HR>
 <H2><A NAME="Bugs_and_Todo_List">Bugs and Todo List</A></H2>
 <P>
-Please report any bugs or requests for changes to the mailing list. The
-current bugs / todo list can be found at <A
+Please report any bugs or requests for changes to the mailing list.
+
+<P>
+The current bugs / todo list can be found at <A
 HREF="http://www.sourceforge.net/projects/speedycgi/.">http://www.sourceforge.net/projects/speedycgi/.</A>
 Go to the Bug Tracking menu and select the group ``bug'' for bugs, or the
 group ``rfe'' for the todo list.
@@ -864,9 +1053,18 @@ HREF="http://daemoninc.com/SpeedyCGI/CGI-SpeedyCGI/Changes">http://daemoninc.com
 
 <P>
 <HR>
+<H2><A NAME="YAPC_2001_Presentation">YAPC 2001 Presentation</A></H2>
+<P>
+I gave an Introduction to SpeedyCGI talk at YAPC 2001. It can be found at
+<A
+HREF="http://daemoninc.com/SpeedyCGI/yapc_2001/">http://daemoninc.com/SpeedyCGI/yapc_2001/</A>
+
+
+<P>
+<HR>
 <H1><A NAME="COPYRIGHT">COPYRIGHT</A></H1>
 <P>
-Copyright (C) 2001 Daemon Consulting Inc.
+Copyright (C) 2002 Sam Horrocks
 
 <P>
 This program is free software; you can redistribute it and/or modify it
@@ -884,6 +1082,10 @@ more details.
 You should have received a copy of the GNU General Public License along
 with this program; if not, write to the Free Software Foundation, Inc., 59
 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+<P>
+This product includes software developed by the Apache Software Foundation
+(http://www.apache.org/).
 
 </BODY>
 

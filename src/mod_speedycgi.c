@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -146,11 +146,11 @@ static void cgi_init(server_rec *s, pool *p)
 
 static int cgi_handler(request_rec *r)
 {
-    int retval, nph, s, e;
+    int retval, nph, socks[NUMFDS];
     BUFF *script_io, *script_err;
     int is_included = !strcmp(r->protocol, "INCLUDED");
-    char *argsbuffer, *argv0, *script_argv[2];
-    int sendenv_size, alloc_size;
+    char *argv0, *script_argv[2];
+    SpeedyBuf buf;
 
     /* May have been a while since we ran last */
     speedy_util_time_invalidate();
@@ -230,34 +230,38 @@ static int cgi_handler(request_rec *r)
     speedy_opt_set_script_argv((const char * const *)script_argv);
 
     /* Allocate argsbuffer and fill in with the env/argv data to send */
-    argsbuffer = speedy_frontend_mkenv(
+    speedy_frontend_mkenv(
 	(const char * const *)ap_create_environment(r->pool, r->subprocess_env),
 	(const char * const *)script_argv,
-	HUGE_STRING_LEN, 0,
-	&sendenv_size, &alloc_size, 1
+	HUGE_STRING_LEN, &buf, 1
     );
 
     /* Connect up to a speedycgi backend, creating a new one if necessary */
-    speedy_frontend_connect(&s, &e);
+    if (!speedy_frontend_connect(socks, NULL)) {
+	ap_log_rerror(APLOG_MARK, APLOG_ERR, r,
+	    "couldn't spawn child process: %s", r->filename);
+	return HTTP_INTERNAL_SERVER_ERROR;
+    }
 
     /*
      * Open up buffered files -- "s" contains stdin/stdout, "e" is stderr
      */
     /* stdin/stdout for script */
     script_io = ap_bcreate(r->pool, B_RDWR|B_SOCKET);
-    ap_note_cleanups_for_fd(r->pool, s);
-    ap_bpushfd(script_io, s, s);
+    ap_note_cleanups_for_fd(r->pool, socks[0]);
+    ap_note_cleanups_for_fd(r->pool, socks[1]);
+    ap_bpushfd(script_io, socks[1], socks[0]);
 
     /* stderr from script */
     script_err = ap_bcreate(r->pool, B_RD|B_SOCKET);
-    ap_note_cleanups_for_fd(r->pool, e);
-    ap_bpushfd(script_err, e, e);
+    ap_note_cleanups_for_fd(r->pool, socks[2]);
+    ap_bpushfd(script_err, socks[2], socks[2]);
 
     /* Send over env/argv data */
-    ap_bwrite(script_io, argsbuffer, sendenv_size);
+    ap_bwrite(script_io, buf.buf, buf.len);
 
-    retval = talk_to_be(r, script_io, script_err, argsbuffer, alloc_size, nph);
-    speedy_free(argsbuffer);
+    retval = talk_to_be(r, script_io, script_err, buf.buf, buf.alloced, nph);
+    speedy_free(buf.buf);
     return retval;
 }
 

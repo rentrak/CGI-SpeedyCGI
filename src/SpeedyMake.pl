@@ -3,7 +3,7 @@
 # Object used in the various Makefile.PL's
 #
 #
-# Copyright (C) 2001  Daemon Consulting Inc.
+# Copyright (C) 2002  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -55,7 +55,7 @@ elsif ($PROFILING) {
 		  '-DSPEEDY_PROFILING=\\\\\"`pwd`\\\\\"';
 }
 elsif ($DEVEL) {
-    $OPTIMIZE	= $WARNOPTS . ' -g ';
+    $OPTIMIZE	= $WARNOPTS . ' -g -DSPEEDY_DEBUG ';
 }
 else {
     # Force -O here, because otherwise on Sun they use odd OPTIMIZE flags
@@ -63,13 +63,25 @@ else {
     $OPTIMIZE	= '-O';
 }
 
+my %macro;
+if ($macro{APACHE_APXS_WORKS} = &apxs_works) {
+    my $ver = &httpd_version;
+    $macro{APACHE_VERSION} = $ver;
+    $macro{MOD_SPEEDYCGI_DIR} = 'mod_speedycgi' . ($ver == 1 ? '' : 2);
+    foreach my $n (qw(LIBEXECDIR SYSCONFDIR)) {
+	$macro{"APACHE_$n"} = &apxs_query($n);
+    }
+}
+
 %write_makefile_common = (
     'OPTIMIZE'	=> $OPTIMIZE,
     'LINKTYPE'	=> ' ',
+    'macro'	=> \%macro,
 );
 
 @src_generated = qw(
-    speedy_optdefs.h speedy_optdefs.c mod_speedycgi_cmds.c SpeedyCGI.pm
+    speedy_optdefs.h speedy_optdefs.c mod_speedycgi_cmds.c
+    mod_speedycgi2_cmds.c SpeedyCGI.pm
 );
 
 sub init { my $class = shift;
@@ -112,6 +124,7 @@ sub src_files { my $class = shift;
 	$class->src_files_extra,
 	qw(
 	    util
+	    sig
 	    frontend
 	    backend
 	    file
@@ -164,7 +177,7 @@ sub allinc { (<../src/*.h>) }
 
 sub symlink_cmds { my $class = shift;
     return join('', map {
-	sprintf("%s: ../src/%s speedy.h\n\t\$(RM_F) %s\n\t\$(CP) ../src/%s %s\n\n",
+	sprintf("%s: ../src/%s\n\t\$(RM_F) %s\n\t\$(CP) ../src/%s %s\n\n",
 	    ($_) x 5
 	);
     } @_);
@@ -175,11 +188,11 @@ sub symlink_c_files { my $class = shift;
 }
 
 sub make_speedy_h { my $class = shift;
-    my($pre, $inc, $main) = (
+    my($pre, $incval, $main) = (
 	$class->prefix, $class->inc, $class->main_h
     );
     open(F, ">speedy.h") || die;
-    foreach ("${pre}inc_${inc}", "${pre}inc", $main) {
+    foreach ("${pre}inc_${incval}", "${pre}inc", $main) {
 	print F "#include \"$_.h\"\n";
     }
     close(F);
@@ -201,7 +214,7 @@ sub extra_defines { my $class = shift;
     join(' ',
 	"-DSPEEDY_PROGNAME=\\\"" . $class->my_name_full . "\\\"",
 	"-DSPEEDY_VERSION=\\\"\$(VERSION)\\\"",
-	'-DSPEEDY_' . ($class->am_frontend ? 'FRONTEND' : 'BACKEND')
+	'-DSPEEDY_' . ($class->am_frontend ? 'FRONTEND' : 'BACKEND'),
     );
 }
 
@@ -257,21 +270,22 @@ sub add_suffix { my($class, $suf) = (shift, shift);
     return (map {"$_$suf"} @_);
 }
 
+sub mod_speedycgi_out { undef }
+
 sub testing_postamble { my $class = shift;
-    my $mod_libexec = `apxs -q LIBEXECDIR 2>/dev/null`;
+    my $module = $write_makefile_common{macro}{MOD_SPEEDYCGI_DIR} . "/" . $class->mod_speedycgi_out;
     my $topdir = &pwd;
     $topdir =~ s/\/[^\/]*$//;
 
     "
-MODULE_LIBEXECDIR = $mod_libexec
 TEST_SPEEDY = ${topdir}/speedy/speedy
 TEST_SPEEDY_BACKENDPROG = ${topdir}/speedy_backend/speedy_backend
-TEST_SPEEDY_MODULE = ${topdir}/mod_speedycgi/mod_speedycgi.so
+TEST_SPEEDY_MODULE = ${topdir}/$module
 
-FULLPERL = SPEEDY=\$(TEST_SPEEDY) SPEEDY_BACKENDPROG=\$(TEST_SPEEDY_BACKENDPROG) SPEEDY_MODULE=\$(TEST_SPEEDY_MODULE) \$(PERL)
+FULLPERL = SPEEDY=\$(TEST_SPEEDY) SPEEDY_BACKENDPROG=\$(TEST_SPEEDY_BACKENDPROG) SPEEDY_MODULE=\$(TEST_SPEEDY_MODULE) SPEEDY_TIMEOUT=300 \$(PERL)
 
 test_install:
-	\$(MAKE) test TEST_SPEEDY=\$(INSTALLBIN)/speedy TEST_SPEEDY_BACKENDPROG=\$(INSTALLBIN)/speedy_backend TEST_SPEEDY_MODULE=\$(MODULE_LIBEXECDIR)/mod_speedycgi.so
+	\$(MAKE) test TEST_SPEEDY=\$(INSTALLBIN)/speedy TEST_SPEEDY_BACKENDPROG=\$(INSTALLBIN)/speedy_backend TEST_SPEEDY_MODULE=\$(APACHE_LIBEXECDIR)/mod_speedycgi.so
 
     ";
 }
@@ -291,7 +305,7 @@ $c_file_link
 
 $optdefs
 
-\$(OBJECT) : $allinc
+\$(OBJECT) : $allinc speedy.h
 
 clean ::
 	\$(RM_F) $clean_files speedy.h $my_name
@@ -310,22 +324,45 @@ sub get_ldopts {
 sub get_ccopts {&ExtUtils::Embed::ccopts();}
 
 sub makeaperl { my $class = shift;
-    my $my_name = $class->my_name_full;
+    my $my_name_val = $class->my_name_full;
     my $ldopts = $class->get_ldopts;
     my $check_syms = $class->check_syms_def;
     my $remove_libs = $class->remove_libs;
 
     "
-all :: $my_name
+all :: $my_name_val
 
-${my_name}: \$(OBJECT)
-	\$(RM_F) ${my_name}
-	$remove_libs \$(LD) -o ${my_name} \$(OBJECT) $ldopts
+${my_name_val}: \$(OBJECT)
+	\$(RM_F) ${my_name_val}
+	$remove_libs \$(LD) -o ${my_name_val} \$(OBJECT) $ldopts
 	$check_syms
 	echo ''
     ";
 }
 
 sub devel {$DEVEL}
+
+sub apxs_query { my $var = shift;
+    my $val = `apxs -q $var 2>/dev/null`;
+    chomp $val;
+    return $? ? undef : $val;
+}
+    
+sub apxs_works {
+    &apxs_query('CC') && 1;
+}
+
+sub httpd_version {
+    my $httpd = &find_httpd;
+    if (`$httpd -v 2>/dev/null` =~ /Apache.2/) {
+	return 2;
+    }
+    return 1;
+}
+
+sub find_httpd {
+    my $x = &apxs_query('SBINDIR') . '/httpd';
+    return -x $x ? $x : 'httpd';
+}
 
 1;

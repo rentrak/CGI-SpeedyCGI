@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,8 +17,25 @@
  *
  */
 
+/*
+ * We can get compiled in two different modes - 32-bit inode#'s and
+ * and 64-bit inode#'s.  On the sun test box, Apache-2 uses 64-bit, perl
+ * uses 32-bit which leads to mis-communication and a corrupt temp file.
+ * Best solution seems to be to just store them as 64-bit.
+ *
+ * If your compiler doesn't support "long long", change these to "dev_t"
+ * and "ino_t" which should work if you don't have the above problem.
+ */
+typedef long long speedy_dev_t;
+typedef long long speedy_ino_t;
+
+#ifndef max
 #define max(a,b) ((a) > (b) ? (a) : (b))
+#endif
+
+#ifndef min
 #define min(a,b) ((a) < (b) ? (a) : (b))
+#endif
 
 #ifndef MAP_FAILED
 #   define MAP_FAILED (-1)
@@ -43,14 +60,19 @@
 #define SP_NOTREADY(e) (SP_EAGAIN(e) || SP_EWOULDBLOCK(e))
 
 typedef struct {
-    dev_t	d;
-    ino_t	i;
+    speedy_ino_t	i;
+    speedy_dev_t	d;
 } SpeedyDevIno;
 
 #define SPEEDY_PKGNAME	"CGI::SpeedyCGI"
 #define SPEEDY_PKG(s)	SPEEDY_PKGNAME "::" s
 
+#ifdef _WIN32
+typedef DWORD pid_t;
+#endif
+
 #include "speedy_util.h"
+#include "speedy_sig.h"
 #include "speedy_opt.h"
 #include "speedy_optdefs.h"
 #include "speedy_poll.h"
@@ -61,5 +83,6 @@ typedef struct {
 #include "speedy_frontend.h"
 #include "speedy_file.h"
 #include "speedy_script.h"
+#include "speedy_circ.h"
 #include "speedy_cb.h"
 #include "speedy_perl.h"

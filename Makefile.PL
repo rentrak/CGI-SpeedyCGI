@@ -6,11 +6,32 @@ BEGIN {
     import SpeedyMake qw(%write_makefile_common);
 }
 
+print <<END;
+
+Optional mod_speedycgi support.
+
+Mod_speedycgi increases performance under Apache by avoiding the fork/exec
+overhead associated with each request under normal SpeedyCGI.  However, it
+requires a working copy of "apxs" in your path, Apache with mod_so
+support, and additional Apache configuration.
+
+END
+print "Compile mod_speedycgi (default no)? ";
+
+my @dirs = qw(src speedy_backend speedy);
+my $macro = $write_makefile_common{macro};
+if (<STDIN> =~ /y/i) {
+    die "ERROR: Could not find a working copy of 'apxs' in your path.\n"
+	unless $macro->{APACHE_APXS_WORKS};
+    print "Compiling for Apache version $macro->{APACHE_VERSION}\n";
+    push(@dirs, $macro->{MOD_SPEEDYCGI_DIR});
+}
+
 WriteMakefile(
     NAME		=> 'CGI::SpeedyCGI',
     VERSION_FROM	=> 'src/SpeedyCGI.src',
     EXE_FILES		=> [qw(speedy/speedy speedy_backend/speedy_backend)],
-    CONFIGURE		=> \&get_dir,
+    CONFIGURE		=> sub { return {DIR=>\@dirs} },
     PM			=> {'src/SpeedyCGI.pm'=>'$(INST_LIBDIR)/SpeedyCGI.pm'},
     MAN1PODS		=> {},
     MAN3PODS		=> {},
@@ -19,49 +40,30 @@ WriteMakefile(
     %write_makefile_common
 );
 
-# Find out which directories to make.  Exclude mod_speedycgi if no apxs cmd
-sub get_dir {
-    my @list = qw(src speedy_backend speedy);
-
-    if (&do_apache) {
-	unshift(@list, 'mod_speedycgi');
-    }
-    return {DIR=>\@list};
-}
-
-sub do_apache {
-    use vars qw($do_apache);
-    if (!defined($do_apache)) {
-	system('apxs -q CC >/dev/null 2>&1');
-	if ($?) {
-	    print "Skipping mod_speedycgi because the 'apxs' command ";
-	    print "wasn't found in your path.\n"; 
-	    $do_apache = 0;
-	} else {
-	    $do_apache = 1;
-	}
-    }
-    return $do_apache;
-}
-
 package MY;
 
 use ExtUtils::Embed;
 
 sub postamble {
     my $extra = SpeedyMake->optdefs_cmds('src');
-    if (&main::do_apache) {
-	$extra .= "\ninstall ::\n\tcd mod_speedycgi && \$(MAKE) install\n";
+    my $test_install_extra;
+    if (my $mod_dir = $macro->{MOD_SPEEDYCGI_DIR}) {
+	$extra .=
+	    "\ninstall ::\n\tcd $mod_dir && \$(MAKE) install\n";
+	$test_install_extra =
+	    "\t\@cd $mod_dir && \$(MAKE) test_install \$(PASTHRU)\n";
     }
 
 '
 test_install:
-	@cd mod_speedycgi && $(MAKE) test_install $(PASTHRU)
 	@cd speedy && $(MAKE) test_install $(PASTHRU)
+' .
+$test_install_extra .
+'
 
-mydist: README README.html lib/CGI/SpeedyCGI.pm makereadable tardist
+mydist: README README.html lib/CGI/SpeedyCGI.pm readable tardist
 
-makereadable:
+readable:
 	chown -R $(USER) .
 	chmod -R u+w,go-w,go+r .
 
@@ -77,23 +79,22 @@ lib/CGI/SpeedyCGI.pm: src/SpeedyCGI.pm
 
 MAKE_INDEX = $(PERL) -w ./util/build_index $(VERSION)
 
-rpm: README README.html
-	./util/build_rpms $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
-	$(MAKE_INDEX)
+rpm: package
 
 rpms: rpm
 
-solpkg: 
-	./util/build_solpkg $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
-	$(MAKE_INDEX)
+solpkg: package
 
 sunpkg: solpkg
 
-bsdpkg:
-	./util/build_bsdpkg $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB)
-	$(MAKE_INDEX)
+bsdpkg: package
 
-index:
+package: all README README.html
+	./util/build_package $(VERSION) $(INSTALLBIN) $(INSTALLSITELIB) $(APACHE_VERSION) $(APACHE_LIBEXECDIR) $(APACHE_SYSCONFDIR) $(MOD_SPEEDYCGI_DIR)
+	$(MAKE_INDEX)
+	@echo "*** Package files can be found in the binaries directory"
+
+package_index:
 	$(MAKE_INDEX)
 
 ' . $extra;

@@ -1,6 +1,6 @@
 
 #
-# Copyright (C) 2001  Daemon Consulting Inc.
+# Copyright (C) 2002  Sam Horrocks
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -57,7 +57,7 @@ defdesc	no max
 letter	M
 context	frontend
 desc	If non-zero, limits the number of speedy backends running for this
-desc	cgi script to <number>.
+desc	perl script to <number>.
 
 option	BackendProg
 type	str
@@ -83,16 +83,17 @@ option	BufsizPost
 type	natural
 letter	b
 context	speedy
-defval	1024
-desc	Use <number> bytes for the buffer that sends data to the CGI script.
+defval	131072
+desc	Use <number> bytes as the maximum size for the buffer that sends
+desc	data to the perl backend.
 
 option	BufsizGet
 type	natural
 letter	B
 context	speedy
-defval	8192
-desc	Use <number> bytes for the buffer that receives data from the CGI
-desc	script.
+defval	131072
+desc	Use <number> bytes as the maximum size for the buffer that receives
+desc	data from the perl backend.
 
 option  BECheckTimeout
 type	natural

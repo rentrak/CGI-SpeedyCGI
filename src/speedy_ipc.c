@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -104,6 +104,7 @@ void speedy_ipc_listen(slotnum_t slotnum) {
 	speedy_util_die("cannot listen on socket");
     fstat(listener, &listener_stbuf);
     listener = speedy_util_pref_fd(listener, PREF_FD_LISTENER);
+    fcntl(listener, F_SETFD, FD_CLOEXEC);
     speedy_poll_init(&listener_pi, listener);
 }
 
@@ -158,7 +159,7 @@ static int accept_ready(int wakeup) {
 int speedy_ipc_accept(int wakeup) {
     if (accept_ready(wakeup)) {
 	do_accept(PREF_FD_ACCEPT_I);
-	dup2(PREF_FD_ACCEPT_I, PREF_FD_ACCEPT_O);
+	do_accept(PREF_FD_ACCEPT_O);
 	do_accept(PREF_FD_ACCEPT_E);
 	return 1;
     }
@@ -176,17 +177,22 @@ static int do_connect(slotnum_t slotnum, int fd) {
     return connect(fd, (struct sockaddr *)&sa, sizeof(sa)) != -1;
 }
 
-void speedy_ipc_connect_prepare(int *s, int *e) {
-    *s = make_sock();
-    *e = make_sock();
+void speedy_ipc_connect_prepare(int socks[NUMFDS]) {
+    int i;
+    for (i = 0; i < NUMFDS; ++i)
+	socks[i] = make_sock();
 }
 
-int speedy_ipc_connect(slotnum_t slotnum, int s, int e) {
-    if (do_connect(slotnum, s) && do_connect(slotnum, e))
-	return 1;
-    close(s);
-    close(e);
-    return 0;
+int speedy_ipc_connect(slotnum_t slotnum, const int socks[NUMFDS]) {
+    int i;
+    for (i = 0; i < NUMFDS; ++i) {
+	if (!do_connect(slotnum, socks[i])) {
+	    for (i = 0; i < NUMFDS; ++i)
+		close(socks[i]);
+	    return 0;
+	}
+    }
+    return 1;
 }
 
 #endif /* SPEEDY_FRONTEND */

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001  Daemon Consulting Inc.
+ * Copyright (C) 2002  Sam Horrocks
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,5 +17,7 @@
  *
  */
 
+void speedy_perl_init();
 void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum);
 void speedy_abort(const char *s);
+int speedy_perl_fork();
