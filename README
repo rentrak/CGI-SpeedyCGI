@@ -107,6 +107,8 @@ To Do
 Write mod_speedycgi as an optional replacement for the CGI front-end.
 This would avoid a fork/exec for each request.
 
+Write a test for multiple persistent perl processes.
+
 Need benchmarks of speedy vs mod_perl
 
 Pass file descriptors 0/1 to the Perl prog using I_SENDFD on systems
@@ -125,6 +127,8 @@ options, etc.
 
 Figure out a way to allow stderr output from the perl program.  Maybe
 out-of-band data on the same socket?
+
+Option to limit maximum number of processes in the queue.
 
 
 Mailing List

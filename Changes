@@ -1,5 +1,12 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+1.5  Tue Mar 30 13:33:55 PST 1999
+
+	- Re-wrote the test scripts to be more reliable.
+
+	- Added a FAQ file.
+
+
 1.4  Mon Mar 29 03:54:39 PST 1999
 
 	- Converted C++ style comments to /**/.  Should help compilation

@@ -16,6 +16,10 @@ README
 Changes
 t/basic.t
 t/shutdown.t
+t/scripts/basic.1
+t/scripts/basic.2
+t/scripts/shutdown
 lib/CGI/SpeedyCGI.pm
 benchmark/timeit
 benchmark/test.pl
+FAQ

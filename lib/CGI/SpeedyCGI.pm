@@ -1,6 +1,6 @@
 package CGI::SpeedyCGI;
 
-$VERSION = '1.4';
+$VERSION = '1.5';
 
 use strict;
 

@@ -1,0 +1,2 @@
+use CGI::SpeedyCGI;
+CGI::SpeedyCGI->new->set_shutdown_handler(sub {open(F, ">$ARGV[0]")});

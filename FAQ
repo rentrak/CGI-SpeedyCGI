@@ -1,0 +1,40 @@
+Compiliation fails with: "queue.c", line 335: cannot do pointer arithmetic
+on operand of unknown size
+
+    Fixed in version 1.4 and later.
+
+"make test" fails on t/shutdown.t
+	
+    Should be fixed in version 1.5
+
+How does the speedy front end connect to the back end process?
+
+    Via a localhost TCP socket.  A queue is kept in /tmp for each cgi
+    program.  In that queue are the port numbers of the perl processes
+    waiting for connections.  The CGI-front end pulls a port number out of
+    this queue, connects, sends over environment and argv, and then uses
+    this socket for Stdin/stdout to the perl process.
+
+If another request comes in while a CGI is running, does the client have      
+to wait or is another process started?  Is there a way to set a limit
+on how many processes get started? 
+    
+    If another request comes while all the perl processes are busy, then
+    another perl process is started.  Just like in CGI there is no limit on
+    how many processes get started.  But, the processes are only started
+    when the load is so high that they're neecessary.  If the load goes
+    down, the processes will die off due to inactivity, unless you disable
+    the timeout.
+
+How much of perl's state is kept when speedy starts another request?          
+Do globals keep their values?  Are destructors run after the request? 
+
+    Globals keep their values.  Nothing is destroyed after the request.
+    STDIN/STDOUT are closed -- other files are not.  %ENV and @ARGV, and
+    %SIG are the only globals changed between requests.
+
+How can I make sure speedy restarts when I edit a perl library used           
+by the CGI? 
+
+    Do a touch on the main cgi-bin file.  The mtime on the main file is
+    checked each time the front-end runs.
