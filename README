@@ -88,19 +88,26 @@ to exit if no new requests have been received after 300 seconds.
 Bugs
 ====
 
-Queue order isn't preserved when a perl process exits.  Could cause
-poor performance.
-
 Under heavy load we run out of sockets, since they hang around in a
 TIME_WAIT state after closing.  Might do better with fifos (named pipes).
 
 On Solaris, sometimes the CGI front-end gets stuck in the poll() call
-in speedy.c.  Re-compiling with -g instead of -O seems to keep this
-from happening.
+in speedy.c.
+
+Speedy command line options do not work with #! in Solaris.  Workaround
+is to pass in SPEEDY_* environment variables instead -- see speedy.h for
+a list.
+
+"make test" reportedly fails under sun4 sunos 4.1.4
+
+Release 1.6 reportedly runs very slow on Dec Alpha running Unix 4.0b
+and fails the intial_eof test.  1.5 runs OK.
 
 
 To Do
 =====
+
+Document the environment variable options.
 
 Write mod_speedycgi as an optional replacement for the CGI front-end.
 This would avoid a fork/exec for each request.
@@ -123,10 +130,10 @@ Need to allow more program control from perl via the CGI::SpeedyCGI module.
 Should be able to have the perl prog wait for a new connection, set
 options, etc.
 
-Figure out a way to allow stderr output from the perl program.  Maybe
-out-of-band data on the same socket?
-
 Option to limit maximum number of processes in the queue.
+
+Add CGI::SpeedyCGI method so script can reliably find out if it is
+running under SpeedyCGI.
 
 
 Mailing List

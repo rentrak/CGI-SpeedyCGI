@@ -38,3 +38,7 @@ by the CGI?
 
     Do a touch on the main cgi-bin file.  The mtime on the main file is
     checked each time the front-end runs.
+
+Do I need to be root to install and/or run SpeedyCGI?
+
+    No, root is not required.

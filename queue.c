@@ -36,39 +36,39 @@
 
 #include "speedy.h"
 
-/* Info stored at the front of the file */
+#define DO_MMAP
+#define FILE_SIZE 512
+
+#define PINFO_BYTES	(FILE_SIZE - (sizeof(time_t) + 2*sizeof(int)))
+#define NUM_PINFO	PINFO_BYTES / sizeof(PersistInfo)
+
+/* Info stored in the file */
 typedef struct {
-    time_t	mtime;		/* Mtime for pinfo's in the queue */
-    int		len;		/* Number of pinfo's in the queue */
-    int		secret_word;	/* Say the secret word */
+    time_t	mtime;			/* Mtime for pinfo's in the queue */
+    int		len;			/* Number of pinfo's in the queue */
+    int		secret_word;		/* Say the secret word */
+    PersistInfo	pinfo[NUM_PINFO];	/* Persistent Info */
 } FileInfo;
 
-#define DO_MMAP
-#define MMAP_SIZE 512
+typedef struct {
+    int		fd;
+    FileInfo	*finfo;
+} FileHandle;
+
 
 #ifdef DO_MMAP
-#    include <sys/mman.h>
+#   include <sys/mman.h>
 #endif
 
 #ifndef MAP_FAILED
 #   define MAP_FAILED -1
 #endif
 
-typedef struct {
-    int		fd;
-#   ifdef DO_MMAP
-	char	*maddr;
-#   endif
-} FileHandle;
-
 
 static char *q_get(SpeedyQueue *q, PersistInfo *pinfo, int getme);
-static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh);
-static void close_queue(FileHandle *fh);
-static char *write_finfo(FileHandle *fh, FileInfo *finfo);
-static void do_shutdown(SpeedyQueue *q, FileHandle *fh, FileInfo *finfo);
-static char *read_pinfo(FileHandle *fh, PersistInfo *pinfo, int idx);
-static char *write_pinfo(FileHandle *fh, PersistInfo *pinfo, int idx);
+static char *open_queue(SpeedyQueue *q, FileHandle *fh);
+static char *close_queue(FileHandle *fh);
+static void do_shutdown(SpeedyQueue *q, FileHandle *fh);
 
 
 char *speedy_q_init(
@@ -99,48 +99,50 @@ char *speedy_q_init(
     return NULL;
 }
 
-void speedy_q_set_secret(SpeedyQueue *q, int secret_word) {
-    q->secret_word = secret_word;
-}
-
 void speedy_q_free(SpeedyQueue *q) {
-    Safefree(q->fname);
+    if (q->fname) {
+	Safefree(q->fname);
+	q->fname = NULL;
+    }
 }
 
 void speedy_q_destroy(SpeedyQueue *q) {
     FileHandle fh;
-    FileInfo finfo;
 
     /* Open the queue. */
-    if (open_queue(q, &finfo, &fh) == NULL) {
-	if (finfo.len == 0) {
+    if (open_queue(q, &fh) == NULL) {
+	/* Only destroy if length is zero */
+	if (fh.finfo->len == 0) {
 	    /* Invalidate this file, in case someone already opened it */
-	    finfo.len = -1;
-	    write_finfo(&fh, &finfo);
+	    fh.finfo->len = -1;
 	    unlink(q->fname);
-	    close_queue(&fh);
 	}
+	close_queue(&fh);
     }
     speedy_q_free(q);
 }
 
 char *speedy_q_add(SpeedyQueue *q, PersistInfo *pinfo) {
     FileHandle fh;
-    FileInfo finfo;
+    FileInfo *finfo;
     char *retval;
 
     /* Open the queue. */
-    if ((retval = open_queue(q, &finfo, &fh))) return retval;
+    if ((retval = open_queue(q, &fh))) return retval;
+    finfo = fh.finfo;
 
     /* If we are adding an out-of-date process, fail */
-    if (q->mtime < finfo.mtime) return "file-changed";
-
-    /* Write to end of queue */
-    retval = write_pinfo(&fh, pinfo, finfo.len++);
-
-    if (retval == NULL) {
-	/* Update length of queue */
-	retval = write_finfo(&fh, &finfo);
+    if (q->mtime < finfo->mtime) {
+        retval = "file-changed";
+    }
+    /* See if queue is full */
+    else if (finfo->len >= NUM_PINFO) {
+	retval = "queue-full";
+    }
+    else {
+	/* Write to end of queue */
+	Copy(pinfo, finfo->pinfo + finfo->len, 1, PersistInfo);
+	finfo->len++;
     }
     close_queue(&fh);
     return retval;
@@ -158,51 +160,47 @@ char *speedy_q_getme(SpeedyQueue *q, PersistInfo *pinfo) {
 
 static char *q_get(SpeedyQueue *q, PersistInfo *pinfo, int getme) {
     FileHandle fh;
-    FileInfo finfo;
-    char *retval;
+    FileInfo *finfo;
+    char *retval = NULL;
+    int i;
 
     /* Open the queue. */
-    if ((retval = open_queue(q, &finfo, &fh))) return retval;
+    if ((retval = open_queue(q, &fh))) return retval;
+    finfo = fh.finfo;
 
-    if (finfo.len == 0) {
+    if (finfo->len == 0) {
 	/* Nothing in the queue, fail */
 	retval = "queue empty";
     } else {
+	/* Getme means remove my entry */
 	if (getme) {
-	    int i;
-	    PersistInfo xpinfo;
+	    retval = "not in queue";
 
 	    /* Search for my record. */
-	    for (i = 0; i < finfo.len; ++i) {
-		/* Read this slot. */
-		if ((retval = read_pinfo(&fh, &xpinfo, i))) break;
-		retval = "not in queue";
+	    for (i = 0; i < finfo->len; ++i) {
+		PersistInfo *xpinfo = finfo->pinfo + i;
 
 		/* Compare */
-		if (pinfo->port == xpinfo.port) {
-
-		    /* Copy last pinfo to this slot. */
-		    retval = read_pinfo(&fh, &xpinfo, --finfo.len);
-		    if (retval == NULL) {
-			retval = write_pinfo(&fh, &xpinfo, i);
-		    }
+		if (pinfo->port == xpinfo->port) {
+		    /* Found.  Move down other pinfos in the queue */
+		    finfo->len--;
+		    if (i < finfo->len)
+			Move(xpinfo+1, xpinfo, finfo->len - i, PersistInfo);
+		    retval = NULL;
 		    break;
 		}
 	    }
 	} else {
 	    /* Get last pinfo in queue */
-	    retval = read_pinfo(&fh, pinfo, --finfo.len);
-	}
-	if (retval == NULL) {
-	    /* Update length of queue */
-	    retval = write_finfo(&fh, &finfo);
+	    finfo->len--;
+	    Copy(finfo->pinfo + finfo->len, pinfo, 1, PersistInfo);
 	}
     }
     close_queue(&fh);
     return retval;
 }
 
-static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh) {
+static char *open_queue(SpeedyQueue *q, FileHandle *fh) {
     struct flock fl;
     struct stat stbuf;
 
@@ -227,49 +225,46 @@ static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh) {
 	    return "wrong file owner";
 	}
 
+	/* File must be long enough */
+	if (stbuf.st_size < FILE_SIZE) ftruncate(fh->fd, FILE_SIZE);
 
 #	ifdef DO_MMAP
-	    /* File must be long enough to map */
-	    if (stbuf.st_size != MMAP_SIZE) ftruncate(fh->fd, MMAP_SIZE);
-
 	    /* Map in */
-	    fh->maddr = mmap(
-		0, MMAP_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fh->fd, 0
+	    fh->finfo = (FileInfo*)mmap(
+		0, FILE_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fh->fd, 0
 	    );
-	    if (fh->maddr == (char *)MAP_FAILED) {
+	    if (fh->finfo == (FileInfo*)MAP_FAILED) {
 		close(fh->fd);
 		return "mmap";
 	    }
-
-	    /* Copy in */
-	    Copy(fh->maddr, finfo, 1, FileInfo);
 #	else
+	    New(123, fh->finfo, FILE_SIZE, FileInfo);
+
 	    /* Read in */
-	    if (read(fh->fd, finfo, sizeof(*finfo)) == -1) {
+	    if (read(fh->fd, fh->finfo, FILE_SIZE) == -1) {
 		close(fh->fd);
 		return "read";
 	    }
 #	endif
 
 	/* If no info from file, create new */
-	if (stbuf.st_size < sizeof(*finfo)) {
-	    char *retval;
-
-	    finfo->len		= 0;
-	    finfo->mtime	= q->mtime;
-	    finfo->secret_word	= speedy_make_secret(q->start_time);
-
-	    if ((retval = write_finfo(fh, finfo))) {
-		close_queue(fh);
-		return retval;
-	    }
+	if (stbuf.st_size < FILE_SIZE) {
+	    fh->finfo->len		= 0;
+	    fh->finfo->mtime		= q->mtime;
+	    fh->finfo->secret_word	= speedy_make_secret(q->start_time);
+	}
+	else if (fh->finfo->len < 0) {
+	    fh->finfo->len = 0;
+	}
+	else if (fh->finfo->len > NUM_PINFO) {
+	    fh->finfo->len = NUM_PINFO;
 	}
 
 	/* Get secret from file */
-	q->secret_word	= finfo->secret_word;
+	q->secret_word	= fh->finfo->secret_word;
 
 	/* See if file has been invalidated since we opened it. */
-	if (finfo->len == -1) {
+	if (fh->finfo->len == -1) {
 	    close_queue(fh);
 	} else {
 	    break;
@@ -277,81 +272,49 @@ static char *open_queue(SpeedyQueue *q, FileInfo *finfo, FileHandle *fh) {
     }
 
     /* If file has older mtime, shut down all procs in it. */
-    if (finfo->mtime < q->mtime) {
-	do_shutdown(q, fh, finfo);
-	finfo->mtime = q->mtime;
+    if (fh->finfo->mtime < q->mtime) {
+	do_shutdown(q, fh);
+	fh->finfo->mtime = q->mtime;
     }
 
     return NULL;
 }
 
-static void close_queue(FileHandle *fh) {
+static char *close_queue(FileHandle *fh) {
 #   ifdef DO_MMAP
-	if (fh->maddr != (char *)MAP_FAILED) {
-	    munmap(fh->maddr, MMAP_SIZE);
+	if (fh->finfo != (FileInfo *)MAP_FAILED) {
+	    munmap((void*)fh->finfo, FILE_SIZE);
+	    fh->finfo = (FileInfo *)MAP_FAILED;
+	}
+#   else
+	if (fh->finfo) {
+	    lseek(fh->fd, 0, SEEK_SET);
+	    CHKERR(write(fh->fd, fh->finfo, FILE_SIZE), "write");
+	    Safefree(fh->finfo);
+	    fh->finfo = NULL;
 	}
 #   endif
     close(fh->fd);
+    return NULL;
 }
 
-static void do_shutdown(SpeedyQueue *q, FileHandle *fh, FileInfo *finfo) {
-    PersistInfo pinfo;
+static void do_shutdown(SpeedyQueue *q, FileHandle *fh) {
+    FileInfo *finfo = fh->finfo;
     int s, e;
     char buf[sizeof(int)+1];
 
-    while (finfo->len) {
-	if (read_pinfo(fh, &pinfo, --finfo->len) == NULL) {
-	    s = speedy_connect(pinfo.port);
-	    e = speedy_connect(pinfo.port);
-	    if (s != -1) {
-		/* Kiss of death */
-		Copy(&(q->secret_word), buf, 1, int);
-		buf[sizeof(int)] = 'X';
-		write(s, buf, sizeof(buf));
-		close(s);
-	    }
+    while (finfo->len--) {
+	PersistInfo *pinfo = finfo->pinfo + finfo->len;
+	if ((s = speedy_connect(pinfo->port)) != -1) {
+	    /* stderr */
+	    e = speedy_connect(pinfo->port);
+
+	    /* Kiss of death */
+	    Copy(&(q->secret_word), buf, 1, int);
+	    buf[sizeof(int)] = 'X';
+	    write(s, buf, sizeof(buf));
+	    close(s);
+	    close(e);
 	}
     }
-}
-
-static char *write_finfo(FileHandle *fh, FileInfo *finfo) {
-#   ifdef DO_MMAP
-	Copy(finfo, fh->maddr, 1, FileInfo);
-#   else
-	lseek(fh->fd, 0, SEEK_SET);
-	CHKERR(write(fh->fd, finfo, sizeof(*finfo)), "write");
-#   endif
-    return NULL;
-}
-
-#define DOSEEK(fh, idx) \
-    lseek((fh->fd), sizeof(FileInfo) + (idx) * sizeof(PersistInfo), SEEK_SET)
-
-#define GETADDR(p, fh, idx) \
-    (p) = (fh->maddr + sizeof(FileInfo) + (idx) * sizeof(PersistInfo)); \
-    if ((p) + sizeof(PersistInfo) >= fh->maddr + MMAP_SIZE) \
-	return "queue overflow";
-
-static char *read_pinfo(FileHandle *fh, PersistInfo *pinfo, int idx) {
-#   ifdef DO_MMAP
-	char *p;
-	GETADDR(p, fh, idx)
-	Copy(p, pinfo, 1, PersistInfo);
-#   else
-	DOSEEK(fh, idx);
-	CHKERR(read(fh->fd, pinfo, sizeof(*pinfo)), "read");
-#   endif
-    return NULL;
-}
-
-static char *write_pinfo(FileHandle *fh, PersistInfo *pinfo, int idx) {
-#   ifdef DO_MMAP
-	char *p;
-	GETADDR(p, fh, idx)
-	Copy(pinfo, p, 1, PersistInfo);
-#   else
-	DOSEEK(fh, idx);
-	CHKERR(write(fh->fd, pinfo, sizeof(*pinfo)), "write");
-#   endif
-    return NULL;
 }

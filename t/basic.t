@@ -9,11 +9,12 @@ my $line = `$sp t/scripts/basic.1 $str`;
 print ($line eq $str ? "ok\n" : "failed\n");
 
 # Test 2
+my $numruns = 4;
 my $scr = 't/scripts/basic.2';
 my $num;
 utime time, time, $scr;
-sleep 2;
-for (my $i = 9; $i > 0; --$i) {
+for (my $i = $numruns; $i > 0; --$i) {
+    sleep 2;
     $num = `$sp $scr`;
 }
-print ($num == 9 ? "ok\n" : "failed\n");
+print ($num == $numruns ? "ok\n" : "failed\n");

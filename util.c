@@ -77,9 +77,11 @@ int speedy_connect(unsigned short port) {
 }
 
 int speedy_make_secret(struct timeval *start_time) {
-    unsigned char *s;
+    unsigned char *s, *t;
     struct timeval now;
     gettimeofday(&now, NULL);
     s = (unsigned char *)&start_time->tv_usec;
-    return ((s[0]<<24)|(s[1]<<16)|(s[2]<<8)|s[3]) ^ now.tv_usec;
+    t = (unsigned char *)&now.tv_usec;
+    return ((s[0]<<24)|(s[1]<<16)|(s[2]<<8)|s[3]) ^
+	   ((t[3]<<24)|(t[2]<<16)|(t[1]<<8)|t[0]);
 }

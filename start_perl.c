@@ -60,6 +60,7 @@ static void onerun(int secret_word, int mypid, PerlVars *pv);
 static int get_string(PerlIO *pio_in, char **buf);
 static void tryexit();
 static void doabort();
+static Signal_t doabort_sig(int x);
 static void all_done();
 static Signal_t wakeup(int x);
 static SV *my_newSVpvn(char *s, int l);
@@ -194,7 +195,7 @@ static void doit(
 	/* Turn off timeout */
 	if (g_alarm) {
 	    alarm(0);
-	    rsignal(SIGALRM, &doabort);  
+	    rsignal(SIGALRM, &doabort_sig);  
 	    g_alarm = 0;
 	}
 
@@ -361,6 +362,9 @@ static void doabort() {
     all_done();
 }
 
+static Signal_t doabort_sig(int x) {
+    doabort();
+}
 
 /* Shutdown and exit. */
 static void all_done() {
@@ -386,9 +390,9 @@ static SV *my_newSVpvn(char *s, int l) {
 
 /* Catch pesky signals */
 static void set_sigs() {
-    rsignal(SIGPIPE, &doabort);
-    rsignal(SIGALRM, &doabort);
-    rsignal(SIGTERM, &doabort);
-    rsignal(SIGHUP,  &doabort);
-    rsignal(SIGINT,  &doabort);
+    rsignal(SIGPIPE, &doabort_sig);
+    rsignal(SIGALRM, &doabort_sig);
+    rsignal(SIGTERM, &doabort_sig);
+    rsignal(SIGHUP,  &doabort_sig);
+    rsignal(SIGINT,  &doabort_sig);
 }

@@ -1,5 +1,19 @@
 Revision history for Perl extension CGI::SpeedyCGI.
 
+1.7  Thu May 13 00:28:42 PDT 1999
+
+	- Re-did a lot of the queue.c code.  Fixes the bug where queue
+	  order was not being preserved when a perl-proc exited.  Also
+	  saves a couple syscalls when using read/write instead of mmap.
+
+	- Fixed compile warnings on Dec Alpha in start_perl.c and 
+	  speedy.c
+
+	- Added "sleep 2" to fix t/basic.t test #2 under HP-UX.
+
+	- Secret word was not very random on little-endian systems.
+
+
 1.6  Sun Apr  4 18:18:25 PDT 1999
 
 	- added support for stderr.

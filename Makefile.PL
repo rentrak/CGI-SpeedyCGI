@@ -49,6 +49,6 @@ sub makeaperl {
     my $ccopts = ccopts();
     "
 speedy: \$(O_FILES)
-	\$(CC) $ccopts -o speedy \$(O_FILES) $ldopts
+	rm -f speedy; \$(CC) $ccopts -o speedy \$(O_FILES) $ldopts
     ";
 }

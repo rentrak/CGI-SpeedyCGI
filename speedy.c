@@ -222,12 +222,12 @@ static char *communicate(
     int s, int e, char *envp[], char *scr_argv[], int secret_word
 )
 {
-#   define NUMCBUFS 3
-    CopyBuf ibuf, obuf, ebuf;
-    CopyBuf *cbs[NUMCBUFS] = {&ibuf, &obuf, &ebuf};
     PollInfo pi;
     char *ibuf_buf;
     int env_sz, ibuf_sz, did_shutdown;
+#   define NUMCBUFS 3
+    CopyBuf ibuf, obuf, ebuf, *cbs[NUMCBUFS];
+    cbs[0] = &ibuf; cbs[1] = &obuf; cbs[2] = &ebuf;
 
     /* Find out the space we need for IBUF to fit the environment */
     env_sz = sendenv_size(envp, scr_argv);
