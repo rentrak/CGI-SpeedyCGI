@@ -1,5 +1,5 @@
 NAME
-    SpeedyCGI - Speed up perl scripts by running them persistently
+    SpeedyCGI - Speed up perl scripts by running them persistently.
 
 SYNOPSIS
      #!/usr/bin/speedy
@@ -62,6 +62,12 @@ DESCRIPTION
     each request. With this module a small amount of frontend code is run
     within the web server - the perl interpreters still run outside the
     server.
+
+    SpeedyCGI and PersistentPerl are currently both names for the same code.
+    SpeedyCGI was the original name, but because people weren't sure what it
+    did, the name PersistentPerl was picked as an alias. At some point
+    SpeedyCGI will probably be replaced by PersistentPerl, or become a sub-
+    class of PersistentPerl to avoid always having two distributions.
 
 OPTIONS
   Setting Option Values
@@ -536,7 +542,7 @@ USING GROUPS
     memory used by the perl interpreters. When groups are not used (ie when
     group name is "none"), each perl script is given its own set of perl
     interpreters, separate from the perl interpreters used for other
-    scripts. In SpeedyCGI each perl interpreter is also a separate unix
+    scripts. In SpeedyCGI each perl interpreter is also a separate system
     process.
 
     When grouping is used, perl interpreters are put into a group. All perl
@@ -582,17 +588,15 @@ USING GROUPS
         run within the same interpreter as your other scripts.
 
     * To pass different perl or SpeedyCGI parameters to different scripts.
-        The first script to start up in a group sets the perl and SpeedyCGI
-        parameters used from then on for all scripts in that group. You may
-        want to use separate groups to create separate policies for
+        You may want to use separate groups to create separate policies for
         different scripts.
 
         Say you have an email application that contains ten perl scripts,
         and since the common perl code used in this application has a bad
-        memory leak, you want to user a MaxRuns setting of 5 for all of
-        these scripts. You then want all your other scripts to run in a
-        separate group with a normal MaxRuns policy. What you can do is edit
-        the ten email scripts, and at the top, put in the line:
+        memory leak, you want to use a MaxRuns setting of 5 for all of these
+        scripts. You then want all your other scripts to run in a separate
+        group with a normal MaxRuns policy. What you can do is edit the ten
+        email scripts, and at the top, put in the line:
 
             #!/usr/bin/speedy -- -gmail -r5
 

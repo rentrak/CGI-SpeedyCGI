@@ -26,6 +26,7 @@ static int saved_pid;
 static int savecore;
 #endif
 
+extern char **environ;
 
 int speedy_util_pref_fd(int oldfd, int newfd) {
     if (newfd == oldfd || newfd == PREF_FD_DONTCARE || oldfd == -1)
@@ -54,7 +55,7 @@ static void end_profiling(int dowrites) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_geteuid() {
+SPEEDY_INLINE int speedy_util_geteuid(void) {
     if (my_euid == -1)
 	my_euid = geteuid();
     return my_euid;
@@ -69,7 +70,7 @@ int speedy_util_seteuid(int id) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_getuid() {
+SPEEDY_INLINE int speedy_util_getuid(void) {
     static int uid = -1;
     if (uid == -1)
 	uid = getuid();
@@ -85,17 +86,16 @@ int speedy_util_argc(const char * const * argv) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_getpid() {
+SPEEDY_INLINE int speedy_util_getpid(void) {
     if (!saved_pid) saved_pid = getpid();
     return saved_pid;
 }
 
-void speedy_util_pid_invalidate() {
+void speedy_util_pid_invalidate(void) {
     saved_pid = 0;
 }
 
 static void just_die(const char *fmt, va_list ap) {
-    extern int errno;
     char buf[2048];
 
     sprintf(buf, "%s[%u]: ", SPEEDY_PROGNAME, (int)getpid());
@@ -129,7 +129,6 @@ void speedy_util_die_quiet(const char *fmt, ...) {
 }
 
 int speedy_util_execvp(const char *filename, const char *const *argv) {
-    extern char **environ;
 
     /* Get original argv */
     environ = (char **)speedy_opt_exec_envp();
@@ -156,31 +155,31 @@ SPEEDY_INLINE void speedy_util_gettimeofday(struct timeval *tv) {
     *tv = saved_time;
 }
 
-SPEEDY_INLINE int speedy_util_time() {
+SPEEDY_INLINE int speedy_util_time(void) {
     struct timeval tv;
     speedy_util_gettimeofday(&tv);
     return tv.tv_sec;
 }
 
-SPEEDY_INLINE void speedy_util_time_invalidate() {
+void speedy_util_time_invalidate(void) {
     saved_time.tv_sec = 0;
 }
 
 char *speedy_util_fname(int num, char type) {
     char *fname;
-    int uid = speedy_util_getuid(), my_euid = speedy_util_geteuid();
+    int uid = speedy_util_getuid(), euid = speedy_util_geteuid();
 
     speedy_new(fname, strlen(OPTVAL_TMPBASE) + 80, char);
 
-    if (my_euid == uid)
-	sprintf(fname, "%s.%x.%x.%c", OPTVAL_TMPBASE, num, my_euid, type);
+    if (euid == uid)
+	sprintf(fname, "%s.%x.%x.%c", OPTVAL_TMPBASE, num, euid, type);
     else
-	sprintf(fname, "%s.%x.%x.%x.%c", OPTVAL_TMPBASE, num, my_euid, uid, type);
+	sprintf(fname, "%s.%x.%x.%x.%c", OPTVAL_TMPBASE, num, euid, uid, type);
 
     return fname;
 }
 
-char *speedy_util_getcwd() {
+char *speedy_util_getcwd(void) {
     char *buf, *cwd_ret;
     int size = 512, too_small;
 
@@ -282,9 +281,11 @@ void speedy_util_exit(int status, int underbar_exit) {
 #   ifdef SPEEDY_DEBUG
 	if (savecore) {
 	    char buf[200];
+	    struct timeval tv;
 
 	    mkdir("/tmp/speedy_core", 0777);
-	    sprintf(buf, "/tmp/speedy_core/%d", getpid());
+	    gettimeofday(&tv, NULL);
+	    sprintf(buf, "/tmp/speedy_core/%d.%06d.%d", (int)tv.tv_sec, (int)tv.tv_usec, getpid());
 	    mkdir(buf, 0777);
 	    chdir(buf);
 	    kill(getpid(), SIGFPE);

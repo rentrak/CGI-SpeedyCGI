@@ -59,7 +59,7 @@ int speedy_frontend_collect_status
     return 0;
 }
 
-void speedy_frontend_clean_running() {
+void speedy_frontend_clean_running(void) {
     /* See if we can kill some dead frontends in the fe_run list */
     while (FILE_HEAD.fe_run_tail && speedy_frontend_dead(FILE_HEAD.fe_run_tail))
 	speedy_frontend_remove_running(FILE_HEAD.fe_run_tail);
@@ -77,7 +77,7 @@ static char		sig_setup_done;
 static time_t		next_alarm;
 static SigList		sl;
 
-static void sig_handler_teardown() {
+static void sig_handler_teardown(int put_back_alarm) {
 
     if (!sig_setup_done)
 	return;
@@ -87,7 +87,7 @@ static void sig_handler_teardown() {
     speedy_sig_free(&sl);
 
     /* Put back alarm */
-    if (next_alarm) {
+    if (put_back_alarm && next_alarm) {
 	next_alarm -= speedy_util_time();
 	alarm(next_alarm > 0 ? next_alarm : 1);
     }
@@ -95,8 +95,8 @@ static void sig_handler_teardown() {
     sig_setup_done = 0;
 }
 
-static void sig_handler_setup() {
-    sig_handler_teardown();
+static void sig_handler_setup(void) {
+    sig_handler_teardown(1);
 
     /* Save alarm for later */
     if ((next_alarm = alarm(0))) {
@@ -137,8 +137,10 @@ static void be_parent_spawn(slotnum_t gslotnum) {
 	/* Child */
 
 	/* Get rid of alarm handler and any alarms */
-	sig_handler_teardown();
-	alarm(0);
+	sig_handler_teardown(0);
+
+	/* Unblock any signals due to file lock */
+	speedy_file_fork_child();
 
 	/* Fork again */
 	pid = fork();
@@ -163,9 +165,6 @@ static void be_parent_spawn(slotnum_t gslotnum) {
 
 	    /* We should be in our own session */
 	    setsid();
-
-	    /* Remove signal handlers */
-	    sig_handler_teardown();
 
 	    /* Exec the backend */
 	    speedy_util_execvp(argv[0], argv);
@@ -311,7 +310,7 @@ static int get_a_backend_hard
 	 * then all done.
 	*/
 	if (sent_sig &&
-	    (*bslotnum = speedy_backend_be_wait_get(gslotnum, fslotnum)))
+	    (*bslotnum = speedy_backend_be_wait_get(gslotnum)))
 	{
 	    break;
 	}
@@ -346,7 +345,7 @@ static int get_a_backend_hard
 	&(FILE_SLOT(gr_slot, gslotnum).fe_tail));
 
     /* Put sighandlers back to their original state */
-    sig_handler_teardown();
+    sig_handler_teardown(1);
 
     return spawn_working;
 }
@@ -360,7 +359,7 @@ static int get_a_backend(slotnum_t fslotnum, slotnum_t *gslotnum) {
 
     /* Try to quickly grab a backend without queueing */
     if (!FILE_SLOT(gr_slot, *gslotnum).fe_head)
-	bslotnum = speedy_backend_be_wait_get(*gslotnum, fslotnum);
+	bslotnum = speedy_backend_be_wait_get(*gslotnum);
 
     /* If that failed, use the queue */
     if (!bslotnum)

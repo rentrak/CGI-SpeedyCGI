@@ -17,12 +17,12 @@
  *
  */
 
-slotnum_t speedy_script_find();
-int  speedy_script_changed();
-void speedy_script_close();
-int  speedy_script_open();
-const struct stat *speedy_script_getstat();
-int  speedy_script_open_failure();
-void speedy_script_munmap();
+slotnum_t speedy_script_find(void);
+int  speedy_script_changed(void);
+void speedy_script_close(void);
+int  speedy_script_open(void);
+const struct stat *speedy_script_getstat(void);
+int  speedy_script_open_failure(void);
+void speedy_script_munmap(void);
 SpeedyMapInfo *speedy_script_mmap(int max_size);
-void speedy_script_missing();
+void speedy_script_missing(void);

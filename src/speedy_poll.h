@@ -39,6 +39,8 @@ typedef struct _PollInfo {
     int			maxfd, numfds;
 } PollInfo;
 
+void speedy_poll_free(PollInfo *pi);
+
 #else
 
 /*******************
@@ -53,6 +55,8 @@ typedef struct _PollInfo {
     int		maxfd;
 } PollInfo;
 
+#define speedy_poll_free(pi)
+
 #endif
 
 /*******************
@@ -60,7 +64,6 @@ typedef struct _PollInfo {
  *******************/
 
 void speedy_poll_init(PollInfo *pi, int maxfd);
-void speedy_poll_free(PollInfo *pi);
 void speedy_poll_reset(PollInfo *pi);
 void speedy_poll_set(PollInfo *pi, int fd, int flags);
 int speedy_poll_wait(PollInfo *pi, int msecs);

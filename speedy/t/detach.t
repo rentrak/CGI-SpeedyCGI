@@ -11,7 +11,7 @@ my $smbuf	=   8 * 1024;
 my $lgbuf	= 512 * 1024;
 my $scr		= 't/scripts/detach';
 
-use vars qw(@open_files @pids);
+use vars qw(@open_files @pids %children);
 
 sub doit { my $sz = shift;
     my($fh, $pid);
@@ -21,13 +21,15 @@ sub doit { my $sz = shift;
     push(@open_files, $fh = IO::File->new);
 
     $| = 1; print ""; $| = 0;
-    if (open($fh, "-|") == 0) {
+    my $child;
+    if (($child = open($fh, "-|")) == 0) {
 	open(F, "$ENV{SPEEDY} -- -B$sz $scr |");
 	print scalar <F>;
 	close(STDOUT);
-	sleep 5;	# Simulate slow drain of output
+	sleep 60;	# Simulate slow drain of output
 	exit;
     }
+    $children{$child}++;
     chop($pid = <$fh>);
     return $pid;
 }
@@ -49,3 +51,5 @@ utime time, time, $scr;
 @pids = (&doit($smbuf), &doit($smbuf));
 ## print STDERR join(' ', 'pids=', @pids, "\n");
 &result($pids[0] && $pids[1] && $pids[0] != $pids[1]);
+
+kill(15, keys(%children));

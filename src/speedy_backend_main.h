@@ -23,6 +23,8 @@
 #define speedy_memmove(d,s,n)	Move(s,d,n,char)
 #define speedy_bzero(s,n)	Zero(s,n,char)
 #define speedy_free(s)		Safefree(s)
-#define speedy_execvp(f,a)	execvp(f,(char * const*)a)
+#define speedy_execvp(f,a)	execvp(f,(char * const *)a)
 #define speedy_new(s,n,t)	New(123,s,n,t)
 #define speedy_renew(s,n,t)	Renew(s,n,t)
+
+void speedy_abort(const char *s);

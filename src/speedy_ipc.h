@@ -22,7 +22,7 @@
 
 void speedy_ipc_listen(slotnum_t slotnum);
 void speedy_ipc_listen_fixfd(slotnum_t slotnum);
-void speedy_ipc_unlisten();
+void speedy_ipc_unlisten(void);
 int  speedy_ipc_connect(slotnum_t slotnum, const int socks[NUMFDS]);
 void speedy_ipc_connect_prepare(int socks[NUMFDS]);
 int  speedy_ipc_accept_ready(int wakeup);

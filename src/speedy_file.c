@@ -38,8 +38,23 @@ static int		fd_is_suspect;
     fl.l_start	= 0;		\
     fl.l_len	= 0
 
-static void file_unmap() {
+static void file_unmap(void) {
     if (maplen) {
+#	if defined(__APPLE__) && defined(MS_INVALIDATE)
+	    /*
+	     * This makes Mac OS-X 10.1 pass all the tests, where it was failing
+	     * alarm/2 and others intermittently.  The problem seems to happen
+	     * when the temp file is expanded, and might be due to some
+	     * memory flushing problem in the OS, but I can't isolate it.
+	     * This change might slow things down due to more disk i/o.
+	     *
+	     * Reproduce the bug by removing the speedy temp file and running:
+	     *   print "$$";
+	     * twice.  The first backend will die, and the second run will
+	     * output a different pid.
+	     */
+	    msync(speedy_file_maddr, maplen, MS_INVALIDATE);
+#	endif
 	(void) munmap((void*)speedy_file_maddr, maplen);
 	speedy_file_maddr = 0;
 	maplen = 0;
@@ -60,21 +75,24 @@ static void file_map(unsigned int len) {
     }
 }
 
-static void file_unlock() {
+static void file_unlock(void) {
     struct flock fl;
 
-    if (!file_locked) return;
+    if (!file_locked)
+	return;
 
-    FILE_HEAD.file_corrupt = 0;
+    FILE_HEAD.lock_owner = 0;
 
     fillin_fl(fl);
     fl.l_type = F_UNLCK;
     if (fcntl(file_fd, F_SETLK, &fl) == -1) speedy_util_die("unlock file");
     file_locked = 0;
+
+    speedy_sig_blockall_undo();
 }
 
 /* Only call this if you're sure the fd is not suspect */
-static void file_close2() {
+static void file_close2(void) {
 
 #ifdef SPEEDY_BACKEND
     if (fd_is_suspect)
@@ -91,11 +109,11 @@ static void file_close2() {
 
 
 #ifdef SPEEDY_BACKEND
-SPEEDY_INLINE void speedy_file_fd_is_suspect() {
+SPEEDY_INLINE void speedy_file_fd_is_suspect(void) {
     fd_is_suspect = 1;
 }
 
-static void fix_suspect_fd() {
+static void fix_suspect_fd(void) {
     if (fd_is_suspect) {
 	if (file_fd != -1) {
 	    struct stat stbuf;
@@ -120,11 +138,18 @@ static void fix_suspect_fd() {
 static void remove_file(int is_corrupt) {
     FILE_HEAD.file_removed = 1;
 #ifdef SPEEDY_DEBUG
-    {
-	/* Keep the file */
-	char newname[100];
-	sprintf(newname, "%s.corrupt.%d", file_name, getpid());
+    if (is_corrupt) {
+	/* Keep the file for debugging */
+	char newname[200];
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+	sprintf(newname, "%s.corrupt.%d.%06d.%d",
+	    file_name, (int)tv.tv_sec, (int)tv.tv_usec, getpid());
 	rename(file_name, newname);
+	DIE_QUIET("temp file corrupt");
+    } else {
+	unlink(file_name);
     }
 #else
     unlink(file_name);
@@ -137,10 +162,10 @@ static void str_replace(char **ptr, char *newval) {
     *ptr = newval;
 }
 
-static void file_lock() {
+static void file_lock(void) {
     static struct timeval file_create_time;
     struct flock fl;
-    int tries = 5;
+    int tries;
     time_t now;
 
     if (file_locked)
@@ -158,7 +183,7 @@ static void file_lock() {
 	file_close2();
     }
 
-    while (tries--) {
+    for (tries = 5; tries--;) {
 	/* If file is not open, open it */
 	if (file_fd == -1) {
 	    str_replace(&saved_tmpbase, speedy_util_strdup(OPTVAL_TMPBASE));
@@ -205,11 +230,10 @@ static void file_lock() {
 	          file_create_time.tv_usec != FILE_HEAD.create_time.tv_usec))
 	{
 	    remove_file(1);
-	    DIE_QUIET("temp file is corrupt");
 	}
 
 	/* If file is corrupt (didn't finish all writes), remove it */
-	if (FILE_HEAD.file_corrupt)
+	if (FILE_HEAD.lock_owner)
 	    remove_file(1);
 
 	/* If file has not been removed then all done */
@@ -219,10 +243,11 @@ static void file_lock() {
 	/* File is invalid */
 	if (cur_state >= FS_HAVESLOTS) {
 	    /* Too late for this proc - slotnums have changed, can't recover */
-	    DIE_QUIET("temp file is invalid");
+	    DIE_QUIET("temp file is corrupt");
 	} else {
-	    /* Bad luck - the file was unlinked after we opened it, but before
-	     * we locked it.  Try again.
+	    /* Bad luck - the file was unlinked after we opened it (possibly
+	     * by us because it was corrupt), but before we locked it.
+	     * Try again.
 	     */
 	    file_close2();
 	}
@@ -230,10 +255,14 @@ static void file_lock() {
     if (!tries) {
 	DIE_QUIET("could not open temp file");
     }
+
+    /* Block all sigs while writing to file */
+    speedy_sig_blockall();
     file_locked = 1;
+    FILE_HEAD.lock_owner = speedy_util_getpid();
 }
 
-static void file_close() {
+static void file_close(void) {
     /* If no groups left, remove the file */
     if (cur_state >= FS_HAVESLOTS) {
 	file_lock();
@@ -243,7 +272,7 @@ static void file_close() {
     file_close2();
 }
 
-int speedy_file_size() {
+int speedy_file_size(void) {
     return maplen;
 }
 
@@ -258,17 +287,8 @@ static void switch_state(int new_state) {
     case FS_HAVESLOTS:
 	file_unlock();
 	break;
-#ifdef FS_LOCKED
-    case FS_LOCKED:
-	if (!file_locked)
-	    file_lock();
-	FILE_HEAD.file_corrupt = 0;
-	break;
-#endif
     case FS_CORRUPT:
-	if (!file_locked)
-	    file_lock();
-	FILE_HEAD.file_corrupt = 1;
+	file_lock();
 	break;
     }
 }
@@ -283,16 +303,16 @@ SPEEDY_INLINE int speedy_file_set_state(int new_state) {
     return retval;
 }
 
-#ifdef SPEEDY_BACKEND
-void speedy_file_fork_child() {
+void speedy_file_fork_child(void) {
+    if (file_locked)
+	speedy_sig_blockall_undo();
     file_locked = 0;
     if (cur_state > FS_HAVESLOTS)
 	speedy_file_set_state(FS_HAVESLOTS);
 }
-#endif
 
 #ifdef SPEEDY_BACKEND
-void speedy_file_need_reopen() {
+void speedy_file_need_reopen(void) {
     last_reopen = 0;
 }
 #endif

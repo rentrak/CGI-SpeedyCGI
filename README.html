@@ -1,6 +1,6 @@
 <HTML>
 <HEAD>
-<TITLE>SpeedyCGI - Speed up perl scripts by running them persistently</TITLE>
+<TITLE>SpeedyCGI - Speed up perl scripts by running them persistently.</TITLE>
 <LINK REV="made" HREF="mailto:root@porky.devel.redhat.com">
 </HEAD>
 
@@ -70,7 +70,7 @@
 <P>
 <H1><A NAME="NAME">NAME</A></H1>
 <P>
-SpeedyCGI - Speed up perl scripts by running them persistently
+SpeedyCGI - Speed up perl scripts by running them persistently.
 
 <P>
 <HR>
@@ -151,6 +151,13 @@ SpeedyCGI also provides an Apache module so that under the Apache web
 server, scripts can be run without the overhead of doing a fork/exec for
 each request. With this module a small amount of frontend code is run
 within the web server - the perl interpreters still run outside the server.
+
+<P>
+SpeedyCGI and PersistentPerl are currently both names for the same code.
+SpeedyCGI was the original name, but because people weren't sure what it
+did, the name PersistentPerl was picked as an alias. At some point
+SpeedyCGI will probably be replaced by PersistentPerl, or become a
+sub-class of PersistentPerl to avoid always having two distributions.
 
 <P>
 <HR>
@@ -796,7 +803,7 @@ The group feature in SpeedyCGI can be used to help reduce the amount of
 memory used by the perl interpreters. When groups are not used (ie when
 group name is ``none''), each perl script is given its own set of perl
 interpreters, separate from the perl interpreters used for other scripts.
-In SpeedyCGI each perl interpreter is also a separate unix process.
+In SpeedyCGI each perl interpreter is also a separate system process.
 
 <P>
 When grouping is used, perl interpreters are put into a group. All perl
@@ -849,14 +856,13 @@ scripts.
 <UL>
 <LI><STRONG><A NAME="item_To">To pass different perl or SpeedyCGI parameters to different scripts.</A></STRONG>
 <P>
-The first script to start up in a group sets the perl and SpeedyCGI
-parameters used from then on for all scripts in that group. You may want to
-use separate groups to create separate policies for different scripts.
+You may want to use separate groups to create separate policies for
+different scripts.
 
 <P>
 Say you have an email application that contains ten perl scripts, and since
 the common perl code used in this application has a bad memory leak, you
-want to user a MaxRuns setting of 5 for all of these scripts. You then want
+want to use a MaxRuns setting of 5 for all of these scripts. You then want
 all your other scripts to run in a separate group with a normal MaxRuns
 policy. What you can do is edit the ten email scripts, and at the top, put
 in the line:

@@ -33,7 +33,7 @@ void speedy_backend_dispose(slotnum_t gslotnum, slotnum_t bslotnum) {
 }
 
 #ifdef SPEEDY_FRONTEND
-slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum, slotnum_t fslotnum) {
+slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum) {
     gr_slot_t *gslot = &FILE_SLOT(gr_slot, gslotnum);
     slotnum_t head = gslot->be_head;
 
@@ -115,8 +115,7 @@ void speedy_backend_remove_be_wait(slotnum_t gslotnum) {
 	 bslotnum = next)
     {
 	next = speedy_slot_next(bslotnum);
-	speedy_util_kill(FILE_SLOT(be_slot, bslotnum).pid, SIGKILL);
-	speedy_backend_dispose(gslotnum, bslotnum);
+	speedy_util_kill(FILE_SLOT(be_slot, bslotnum).pid, SIGTERM);
     }
 }
 

@@ -32,3 +32,5 @@ int speedy_sig_got(const SigList *sl, int sig);
 void speedy_sig_wait(SigList *sl);
 void speedy_sig_init(SigList *sl, const int *sigs, int numsigs, int how);
 void speedy_sig_free(const SigList *sl);
+void speedy_sig_blockall(void);
+void speedy_sig_blockall_undo(void);

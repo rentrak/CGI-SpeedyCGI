@@ -119,7 +119,7 @@ void speedy_group_cleanup(slotnum_t gslotnum) {
     SLOT_FREE(gslotnum, "group (speedy_group_cleanup)");
 }
 
-slotnum_t speedy_group_create() {
+slotnum_t speedy_group_create(void) {
     slotnum_t gslotnum;
 
     gslotnum = SLOT_ALLOC("group (speedy_group_create)");

@@ -11,6 +11,7 @@ my $cmd = "exec $ENV{SPEEDY} -- -M1 $scr </dev/null |";
 my $pid = open (RUN1, $cmd);
 sleep(1);
 kill(9, $pid);
+wait;
 open (RUN2, $cmd);
 
 $pid1 = <RUN1>; chop $pid1;

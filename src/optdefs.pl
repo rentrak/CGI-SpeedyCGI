@@ -32,10 +32,10 @@ my %context = (
 );
 
 my %ctype = (
-    'whole'	=>'int',
-    'natural'	=>'int',
-    'toggle'	=>'int',
-    'str'	=>'char*',
+    'whole'	=>'i',
+    'natural'	=>'i',
+    'toggle'	=>'i',
+    'str'	=>'c',
 );
 my @type = sort keys %ctype;
 
@@ -105,14 +105,22 @@ for (my $i = 0; $i <= $#options; ++$i) {
 #
 &open_file('speedy_optdefs.c');
 print "\n#include \"speedy.h\"\n\n";
-print "OptRec speedy_optdefs[] = {\n";
 
+# Make storage for integer option values
+foreach my $opt (@options) {
+    if ($ctype{$opt->{type}} eq 'i') {
+	printf "static int value_%s = %d;\n",
+	    $opt->{option}, $opt->{defval} || 0;
+    }
+}
+
+print "\nOptRec speedy_optdefs[] = {\n";
 foreach my $opt (@options) {
     my @toprint = (
 	["\"%s\"",	uc($opt->{option})],
-	["(void*)%s",	!defined($opt->{defval}) ? 0 :
-	    ($ctype{$opt->{type}} eq 'char*'
-		? "\"$opt->{defval}\"" : $opt->{defval})
+	["%s",		($ctype{$opt->{type}} eq 'c'
+	    ? defined($opt->{defval}) ? "\"$opt->{defval}\"" : 'NULL'
+	    : "&value_$opt->{option}")
 	],
 	["'%s'",	$opt->{letter} || "\\0"],
 	["OTYPE_%s",	uc($opt->{type})],
@@ -136,9 +144,8 @@ for (my $i = 0; $i <= $#options; ++$i) {
     my $opt = $options[$i];
     my $nm = uc($opt->{option});
 
-    printf "#define OPTVAL_%s ((%s)speedy_optdefs[%d].value)\n",
-	$nm, $ctype{$opt->{type}}, $i;
-    printf "#define OPTIDX_%s %d\n", $nm, $i;
+    printf "#define OPTVAL_%s %s_OPTVAL(speedy_optdefs + %d)\n",
+	$nm, $ctype{$opt->{type}} eq 'i' ? 'INT' : 'STR', $i;
     printf "#define OPTREC_%s speedy_optdefs[%d]\n", $nm, $i;
 }
 print "\n";
@@ -222,7 +229,7 @@ sub insert_pod_options {
 	if ($opt->{letter}) {
 	    my $arg = '';
 	    if ($opt->{type} ne 'toggle') {
-		$arg = $ctype{$opt->{type}} eq 'char*' ? '<string>' : '<number>'
+		$arg = $ctype{$opt->{type}} eq 'c' ? '<string>' : '<number>'
 	    }
 	    $cmdline = sprintf("-%s%s", $opt->{letter}, $arg);
 	}
@@ -230,7 +237,7 @@ sub insert_pod_options {
 	printf "    Command Line    : %s\n", $cmdline;
 	if ($opt->{type} ne 'toggle') {
 	    my $defval = defined($opt->{defval}) ? $opt->{defval} : '';
-	    if ($ctype{$opt->{type}} eq 'char*') {
+	    if ($ctype{$opt->{type}} eq 'c') {
 		$defval = "\"$defval\"";
 	    }
 	    printf "    Default Value   : %s%s\n",

@@ -1,5 +1,20 @@
 Revision history for Perl extension SpeedyCGI.
 
+2.21	Thu Sep 26 15:27:35 PDT 2002
+
+	- Fix too many backends problem reported by Theo Petersen.  The
+	  problem is due to temp-file corruption that occurs when the
+	  web-server sends a TERM signal to the frontend while it is working
+	  on the temp file.  It also results in some backends failing due
+	  to the corruption.  Added a fix so that signals are always blocked
+	  while working on the temp file.
+
+	- Shutdown handler should be called after script is touched.
+
+	- Fixes for Mac OS X 10.1.  Workaround the sigpending() bug,
+	  and add msync() which appears to fix a shared-memory flushing
+	  problem when temp-file is expanded.
+
 2.20	Wed Sep 11 19:33:36 PDT 2002
 
 	- Added a mod_speedycgi module that works under Apache 2.0.39 or

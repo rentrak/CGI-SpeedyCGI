@@ -30,6 +30,8 @@
 #   define NORMAL_RUN 1
 #endif
 
+extern char **environ;
+
 static const int oursigs[] = {SIGCHLD, SIGUSR1, SIGALRM};
 #define NUM_OURSIGS (sizeof(oursigs) / sizeof(oursigs[0]))
 
@@ -164,10 +166,11 @@ static void do_cleanup(slotnum_t gslotnum) {
 }
 
 int main(int argc, char **argv, char **_junk) {
-    extern char **environ;
     slotnum_t gslotnum;
     int i;
     SigList sl;
+
+    speedy_util_unlimit_core();
 
 #ifdef SPEEDY_DEBUG
     dont_fork = getenv("SPEEDY_NOPARENT") != NULL;

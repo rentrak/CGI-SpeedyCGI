@@ -30,17 +30,20 @@ typedef struct _OptRect {
 #define SPEEDY_OPTFL_CHANGED	0x01 /* No longer default */
 #define SPEEDY_OPTFL_MUST_FREE	0x02 /* value must be freed */
 
+#define INT_OPTVAL(r) (((int*)((r)->value))[0])
+#define STR_OPTVAL(r) ((const char*)((r)->value))
+
 void speedy_opt_init(const char * const *argv, const char * const *envp);
-void speedy_opt_read_shbang();
+void speedy_opt_read_shbang(void);
 int speedy_opt_set(OptRec *optrec, const char *value);
 int speedy_opt_set_byname(const char *optname, const char *value);
 const char *speedy_opt_get(OptRec *optrec);
 void speedy_opt_set_script_argv(const char * const *argv);
-const char * const *speedy_opt_script_argv();
+const char * const *speedy_opt_script_argv(void);
 char **speedy_opt_perl_argv(const char *script_name);
-const char * const *speedy_opt_exec_argv();
-const char * const *speedy_opt_exec_envp();
-const char * const *speedy_opt_orig_argv();
-SPEEDY_INLINE const char *speedy_opt_script_fname();
-void speedy_opt_save();
-void speedy_opt_restore();
+const char * const *speedy_opt_exec_argv(void);
+const char * const *speedy_opt_exec_envp(void);
+const char * const *speedy_opt_orig_argv(void);
+SPEEDY_INLINE const char *speedy_opt_script_fname(void);
+void speedy_opt_save(void);
+void speedy_opt_restore(void);

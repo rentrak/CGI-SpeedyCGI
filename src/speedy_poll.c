@@ -76,8 +76,6 @@ void speedy_poll_init(PollInfo *pi, int maxfd) {
     speedy_poll_reset(pi);
 }
 
-void speedy_poll_free(PollInfo *pi) { }
-
 void speedy_poll_reset(PollInfo *pi) {
     FD_ZERO(pi->fdset + 0);
     FD_ZERO(pi->fdset + 1);

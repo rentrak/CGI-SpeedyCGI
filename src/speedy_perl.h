@@ -17,7 +17,6 @@
  *
  */
 
-void speedy_perl_init();
+void speedy_perl_init(void);
 void speedy_perl_run(slotnum_t _gslotnum, slotnum_t _bslotnum);
-void speedy_abort(const char *s);
-int speedy_perl_fork();
+int speedy_perl_fork(void);

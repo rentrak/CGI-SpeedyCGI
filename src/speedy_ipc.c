@@ -45,7 +45,7 @@ static void make_sockname(
     speedy_free(fname);
 }
 
-static int make_sock() {
+static int make_sock(void) {
     int i, fd;
 
     for (i = 0; i < 300; ++i) {
@@ -94,7 +94,7 @@ void speedy_ipc_listen(slotnum_t slotnum) {
     }
     if (listener == -1) {
 	mode_t saved_umask = umask(077);
-	listener = make_sock(PREF_FD_LISTENER);
+	listener = make_sock();
 	make_sockname(slotnum, &sa, 1);
 	if (bind(listener, (struct sockaddr*)&sa, sizeof(sa)) == -1)
 	    speedy_util_die("cannot bind socket");
@@ -108,7 +108,7 @@ void speedy_ipc_listen(slotnum_t slotnum) {
     speedy_poll_init(&listener_pi, listener);
 }
 
-static void ipc_unlisten() {
+static void ipc_unlisten(void) {
     close(listener);
     listener = -1;
     speedy_poll_free(&listener_pi);

@@ -53,45 +53,45 @@ static OptRec *optdefs_save;	/* For save/restore */
 #define strlist_append2(l, s, len)	\
 		strlist_append3((l), speedy_util_strndup((s), (len)))
 
-static void strlist_init(StrList *list) {
-    list->malloced = STRLIST_MALLOC;
-    speedy_new(list->ptrs, STRLIST_MALLOC, char*);
-    list->len = 0;
+static void strlist_init(StrList *lst) {
+    lst->malloced = STRLIST_MALLOC;
+    speedy_new(lst->ptrs, STRLIST_MALLOC, char*);
+    lst->len = 0;
 }
 
-static void strlist_setlen(StrList *list, int newlen) {
-    while (list->len > newlen)
-	speedy_free(list->ptrs[--(list->len)]);
-    list->len = newlen;
-    while (list->len >= list->malloced) {
-	list->malloced *= 2;
-	speedy_renew(list->ptrs, list->malloced, char*);
+static void strlist_setlen(StrList *lst, int newlen) {
+    while (lst->len > newlen)
+	speedy_free(lst->ptrs[--(lst->len)]);
+    lst->len = newlen;
+    while (lst->len >= lst->malloced) {
+	lst->malloced *= 2;
+	speedy_renew(lst->ptrs, lst->malloced, char*);
     }
 }
 
-static void strlist_append3(StrList *list, char *str) {
-    list->ptrs[list->len] = str;
-    strlist_setlen(list, list->len + 1);
+static void strlist_append3(StrList *lst, char *str) {
+    lst->ptrs[lst->len] = str;
+    strlist_setlen(lst, lst->len + 1);
 }
 
-static char **strlist_export(StrList *list) {
-    list->ptrs[list->len] = NULL;
-    return list->ptrs;
+static char **strlist_export(StrList *lst) {
+    lst->ptrs[lst->len] = NULL;
+    return lst->ptrs;
 }
 
-static void strlist_concat2(StrList *list, const char * const *in) {
+static void strlist_concat2(StrList *lst, const char * const *in) {
     for (; *in; ++in)
-	strlist_append(list, *in);
+	strlist_append(lst, *in);
 }
 
-static void strlist_free(StrList *list) {
-    strlist_setlen(list, 0);
-    speedy_free(list->ptrs);
+static void strlist_free(StrList *lst) {
+    strlist_setlen(lst, 0);
+    speedy_free(lst->ptrs);
 }
 
-static void strlist_replace(StrList *list, int i, char *newstr) {
-    speedy_free(list->ptrs[i]);
-    list->ptrs[i] = newstr;
+static void strlist_replace(StrList *lst, int i, char *newstr) {
+    speedy_free(lst->ptrs[i]);
+    lst->ptrs[i] = newstr;
 }
 
 /* Split string on whitespace */
@@ -197,7 +197,7 @@ int speedy_opt_set(OptRec *optrec, const char *value) {
 	}
     }
     else if (optrec->type == OTYPE_TOGGLE) {
-	optrec->value = (void*)!((int)optrec->value);
+	INT_OPTVAL(optrec) = !INT_OPTVAL(optrec);
     }
     else {
 	int val = atoi(value);
@@ -210,7 +210,7 @@ int speedy_opt_set(OptRec *optrec, const char *value) {
 		if (val < 1) return 0;
 		break;
 	}
-	optrec->value = (void*)val;
+	INT_OPTVAL(optrec) = val;
     }
     optrec->flags |= SPEEDY_OPTFL_CHANGED;
     return 1;
@@ -218,10 +218,10 @@ int speedy_opt_set(OptRec *optrec, const char *value) {
 
 const char *speedy_opt_get(OptRec *optrec) {
     if (optrec->type == OTYPE_STR) {
-	return (char*)optrec->value;
+	return STR_OPTVAL(optrec);
     } else {
 	static char buf[20];
-	sprintf(buf, "%u", (int)optrec->value);
+	sprintf(buf, "%u", INT_OPTVAL(optrec));
 	return buf;
     }
 }
@@ -359,7 +359,7 @@ void speedy_opt_init(const char * const *argv, const char * const *envp) {
 }
 
 /* Read the script file for options on the #! line at top. */
-void speedy_opt_read_shbang() {
+void speedy_opt_read_shbang(void) {
     char *argv[3], *arg0;
     StrList speedy_opts;
     SpeedyMapInfo *mi;
@@ -417,11 +417,11 @@ void speedy_opt_set_script_argv(const char * const *argv) {
     got_shbang = 0;
 }
 
-const char * const *speedy_opt_script_argv() {
+const char * const *speedy_opt_script_argv(void) {
     return (const char * const *)(strlist_export(&exec_argv) + script_argv_loc);
 }
 
-SPEEDY_INLINE const char *speedy_opt_script_fname() {
+SPEEDY_INLINE const char *speedy_opt_script_fname(void) {
     return exec_argv.ptrs[script_argv_loc];
 }
 
@@ -446,16 +446,16 @@ char **speedy_opt_perl_argv(const char *script_name) {
 }
 #endif
 
-const char * const *speedy_opt_orig_argv() {
+const char * const *speedy_opt_orig_argv(void) {
     return orig_argv;
 }
 
-const char * const *speedy_opt_exec_envp() {
+const char * const *speedy_opt_exec_envp(void) {
     return (const char * const *)strlist_export(&exec_envp);
 }
 
 #ifdef SPEEDY_FRONTEND
-const char * const *speedy_opt_exec_argv() {
+const char * const *speedy_opt_exec_argv(void) {
     exec_argv.ptrs[0] = OPTVAL_BACKENDPROG;
     return (const char * const *)strlist_export(&exec_argv);
 }
@@ -469,12 +469,12 @@ static void copy_optdefs(OptRec *dest, OptRec *src) {
 	speedy_optdefs[i].flags &= ~SPEEDY_OPTFL_MUST_FREE;
 }
 
-void speedy_opt_save() {
+void speedy_opt_save(void) {
     speedy_new(optdefs_save, SPEEDY_NUMOPTS, OptRec);
     copy_optdefs(optdefs_save, speedy_optdefs);
 }
 
-void speedy_opt_restore() {
+void speedy_opt_restore(void) {
     int i;
 
     for (i = 0; i < SPEEDY_NUMOPTS; ++i) {

@@ -18,7 +18,7 @@
  */
 
 void speedy_backend_dispose(slotnum_t gslotnum, slotnum_t bslotnum);
-slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum, slotnum_t fslotnum);
+slotnum_t speedy_backend_be_wait_get(slotnum_t gslotnum);
 void speedy_backend_be_wait_put(slotnum_t gslotnum, slotnum_t bslotnum);
 slotnum_t speedy_backend_create_slot(slotnum_t gslotnum);
 void speedy_backend_remove_be_wait(slotnum_t gslotnum);

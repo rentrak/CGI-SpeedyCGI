@@ -23,18 +23,18 @@ static struct stat	script_stat;
 static int		script_fd;
 static time_t		last_open;
 
-void speedy_script_close() {
+void speedy_script_close(void) {
     if (last_open)
 	close(script_fd);
     last_open = 0;
 }
 
-void speedy_script_missing() {
+void speedy_script_missing(void) {
     DIE_QUIET("Missing script filename.  "
 	"Type \"perldoc " SPEEDY_PKGNAME "\" for SpeedyCGI documentation.");
 }
 
-int speedy_script_open_failure() {
+int speedy_script_open_failure(void) {
     time_t now = speedy_util_time();
     const char *fname;
 
@@ -53,7 +53,7 @@ int speedy_script_open_failure() {
     return 0;
 }
 
-int speedy_script_open() {
+int speedy_script_open(void) {
     switch (speedy_script_open_failure()) {
 	case 1:
 	    speedy_script_missing();
@@ -66,7 +66,7 @@ int speedy_script_open() {
 }
 
 #ifdef SPEEDY_FRONTEND
-int speedy_script_changed() {
+int speedy_script_changed(void) {
     struct stat stbuf;
 
     if (!last_open)
@@ -80,12 +80,12 @@ int speedy_script_changed() {
 }
 #endif
 
-const struct stat *speedy_script_getstat() {
+const struct stat *speedy_script_getstat(void) {
     speedy_script_open();
     return &script_stat;
 }
 
-slotnum_t speedy_script_find() {
+slotnum_t speedy_script_find(void) {
     slotnum_t gslotnum, next, name_match = 0;
     int single_script = DOING_SINGLE_SCRIPT;
     
@@ -176,7 +176,7 @@ slotnum_t speedy_script_find() {
 
 static SpeedyMapInfo *script_mapinfo;
 
-void speedy_script_munmap() {
+void speedy_script_munmap(void) {
     if (script_mapinfo) {
 	speedy_util_mapout(script_mapinfo);
 	script_mapinfo = NULL;

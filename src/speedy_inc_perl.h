@@ -20,6 +20,7 @@
 #include <EXTERN.h>
 #include <perl.h>
 #include <XSUB.h>
+#include <patchlevel.h>
 
 /* For sockets */
 #ifndef VMS
@@ -77,8 +78,6 @@
 #  if defined(HAS_FCNTL) && !defined(I_FCNTL)
 #    include <fcntl.h>
 #  endif
-
-#include <patchlevel.h>
 
 /* For mmap */
 /* We should use I_SYS_MMAN here, but it doesn't seem to work yet */

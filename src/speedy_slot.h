@@ -102,7 +102,7 @@ typedef struct _dummy_slot {
 	} \
     } while (0)
 
-slotnum_t speedy_slot_alloc();
+slotnum_t speedy_slot_alloc(void);
 void speedy_slot_free(slotnum_t slotnum);
 slotnum_t speedy_slot_check(slotnum_t slotnum);
 void speedy_slot_remove(slotnum_t slotnum, slotnum_t *head, slotnum_t *tail);

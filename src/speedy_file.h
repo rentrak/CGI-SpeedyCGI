@@ -19,13 +19,13 @@
 
 typedef struct _file_head {
     struct timeval	create_time;
+    pid_t		lock_owner;
     slotnum_t		group_head;
     slotnum_t		group_tail;
     slotnum_t		slot_free;
     slotnum_t		slots_alloced;
     slotnum_t		fe_run_head;
     slotnum_t		fe_run_tail;
-    unsigned char	file_corrupt;
     unsigned char	file_removed;
 } file_head_t;
 
@@ -35,7 +35,7 @@ typedef struct _file {
 } speedy_file_t;
 
 #define FILE_ALLOC_CHUNK	512
-#define FILE_REV		5
+#define FILE_REV		6
 #define FILE_HEAD		(speedy_file_maddr->file_head)
 #define FILE_SLOTS		(speedy_file_maddr->slots)
 #define FILE_SLOT(member, n)	(FILE_SLOTS[SLOT_CHECK(n)-1].slot_u.member)
@@ -49,8 +49,8 @@ typedef struct _file {
 #define FS_CORRUPT	3	/* Locked, mmaped, non-atomic writes to file */
 
 extern speedy_file_t *speedy_file_maddr;
-SPEEDY_INLINE void speedy_file_fd_is_suspect();
-int speedy_file_size();
+SPEEDY_INLINE void speedy_file_fd_is_suspect(void);
+int speedy_file_size(void);
 SPEEDY_INLINE int speedy_file_set_state(int new_state);
-void speedy_file_need_reopen();
-void speedy_file_fork_child();
+void speedy_file_need_reopen(void);
+void speedy_file_fork_child(void);

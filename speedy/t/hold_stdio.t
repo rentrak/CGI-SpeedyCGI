@@ -16,7 +16,7 @@ sub adios { my $ok = shift;
 
 print "1..2\n";
 $SIG{ALRM} = sub {&adios(0)};
-alarm(5);
+alarm(10);
 
 # Test1
 system("$ENV{SPEEDY} t/scripts/hold_stdio 2 >$TMP");
@@ -24,6 +24,6 @@ if (`cat $TMP` eq "ok\n") {
     print "ok\n";
     
     # Test #2
-    sleep(3);
+    sleep(5);
     &adios(`cat $TMP` eq "ok\nchild\n");
 }

@@ -23,16 +23,41 @@
  * Signal handling routines
  */
 
-static volatile int got_sig[SPEEDY_MAXSIG+1];
+static volatile int got_sig[SPEEDY_MAXSIG];
+static sigset_t blockall_save;
+static int all_blocked;
+
+void speedy_sig_blockall(void) {
+    sigset_t full_set;
+
+    sigfillset(&full_set);
+    sigprocmask(SIG_BLOCK, &full_set, &blockall_save);
+    all_blocked = 1;
+}
+
+void speedy_sig_blockall_undo(void) {
+    sigprocmask(SIG_SETMASK, &blockall_save, NULL);
+    all_blocked = 0;
+}
+
+static int sig_find(const volatile int sig_rcvd[SPEEDY_MAXSIG], int sig) {
+    register int i;
+
+    for (i = 0; i < SPEEDY_MAXSIG && sig_rcvd[i]; ++i) {
+	if (sig_rcvd[i] == sig)
+	    return -1;
+    }
+    return i;
+}
 
 static void sig_handler(int sig) {
     int i;
 
-    for (i = 0; i < SPEEDY_MAXSIG-1 && got_sig[i]; ++i)
-	if (got_sig[i] == sig)
-	    return;
-    got_sig[i++] = sig;
-    got_sig[i] = 0;
+    if ((i = sig_find(got_sig, sig)) >= 0 && i < SPEEDY_MAXSIG) {
+	got_sig[i++] = sig;
+	if (i < SPEEDY_MAXSIG)
+	    got_sig[i] = 0;
+    }
 }
 
 static void sig_wait_basic(const SigList *sl) {
@@ -47,12 +72,7 @@ void speedy_sig_wait(SigList *sl) {
 }
 
 int speedy_sig_got(const SigList *sl, int sig) {
-    int i;
-
-    for (i = 0; i < SPEEDY_MAXSIG && sl->sig_rcvd[i]; ++i)
-	if (sl->sig_rcvd[i] == sig)
-	    return 1;
-    return 0;
+    return sig_find(sl->sig_rcvd, sig) == -1;
 }
 
 static void sig_init2(SigList *sl, int how) {
@@ -69,7 +89,15 @@ static void sig_init2(SigList *sl, int how) {
     }
 
     /* Block or unblock our signals.  Save original mask */
-    {
+    if (all_blocked) {
+	sl->sigset_save = blockall_save;
+	for (i = 0; i < sl->numsigs; ++i) {
+	    if (how == SIG_BLOCK)
+		sigaddset(&blockall_save, sl->signum[i]);
+	    else
+		sigdelset(&blockall_save, sl->signum[i]);
+	}
+    } else {
 	sigset_t block_sigs;
 	sigemptyset(&block_sigs);
 	for (i = 0; i < sl->numsigs; ++i)
@@ -104,6 +132,14 @@ void speedy_sig_free(const SigList *sl) {
      */
     do {
 	sigset_t set;
+	
+	/* Bug in Mac OS X 10.1 and earlier - sigpending is essentially a
+	 * no-op, so we get garbage, and get stuck in sigsuspend.
+	 * Workaround by clearing out the set initially so we get no pending
+	 * signals back.
+	 */
+	sigemptyset(&set);
+
 	if (sigpending(&set) == -1)
 	    break;
 	for (i = 0; i < sl->numsigs; ++i) {
@@ -115,7 +151,10 @@ void speedy_sig_free(const SigList *sl) {
     } while (i < sl->numsigs);
 
     /* Unblock sigs */
-    sigprocmask(SIG_SETMASK, &sl->sigset_save, NULL);
+    if (all_blocked)
+	blockall_save = sl->sigset_save;
+    else
+	sigprocmask(SIG_SETMASK, &sl->sigset_save, NULL);
 
     /* Install old handlers */
     for (i = 0; i < sl->numsigs; ++i)

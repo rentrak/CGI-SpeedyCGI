@@ -93,6 +93,8 @@
 
 #include "speedy.h"
 
+extern char **environ;
+
 module AP_MODULE_DECLARE_DATA speedycgi_module;
 static request_rec *global_r;
 #if APR_HAS_THREADS
@@ -114,8 +116,7 @@ static const char *set_option(cmd_parms *cmd, void *dummy, const char *arg) {
 /* This must get called after "set_option" calls above.  This is the current
  * apache behaviour, so it works.
  */
-static void one_time_init() {
-    extern char **environ;
+static void one_time_init(void) {
     static const char *prog_argv[2];
 
     /* Initialize speedy options */
@@ -197,7 +198,7 @@ static apr_status_t run_cgi_child(apr_file_t **script_out,
 {
     apr_status_t rc = APR_SUCCESS;
     SpeedyBuf buf;
-    int i, socks[NUMFDS];
+    int socks[NUMFDS];
     char **env;
 
 #if NUMFDS != 3

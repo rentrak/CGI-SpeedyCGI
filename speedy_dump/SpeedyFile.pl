@@ -4,7 +4,7 @@ package SpeedyFile;
 
 require 'speedy.ph';
 
-my $FILEREV = 5;
+my $FILEREV = 6;
 
 sub new { my($class, $fname) = @_;
     bless {fname=>$fname}, $class;

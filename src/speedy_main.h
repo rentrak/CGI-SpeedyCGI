@@ -27,6 +27,6 @@
 #define speedy_free(s)		free(s)
 #define speedy_new(s,n,t)	do {(s) = (t*)malloc((n)*sizeof(t));} while (0)
 #define speedy_renew(s,n,t)	do {(s) = (t*)realloc((s),(n)*sizeof(t));} while (0)
-#define speedy_execvp(f,a)	execvp(f,(char *const*)a)
+#define speedy_execvp(f,a)	execvp(f,(char * const *)a)
 
 void speedy_abort(const char *s);

@@ -121,6 +121,8 @@ static int did_opt_init, profile_runs;
 #define CB_OUT	(cb[1])
 #define CB_ERR	(cb[2])
 
+extern char **environ;
+
 static CopyBuf cb[NUMFDS];
 static int got_stdout, stop_sock_reads, read_stopped[NUMFDS];
 
@@ -148,11 +150,10 @@ static void try_close(const CopyBuf *b) {
 
 static void doit(const char * const *argv, int *exit_on_sig, int *exit_val)
 {
-    extern char **environ;
     PollInfo pi;
     SpeedyBuf ibuf;
     int backend_exited = 0, am_child = 0, in_is_tty;
-    int read_stopped[NUMFDS], socks[NUMFDS];
+    int socks[NUMFDS];
     register int i;
     slotnum_t fslotnum;
 
@@ -468,6 +469,8 @@ static void doit(const char * const *argv, int *exit_on_sig, int *exit_val)
 
 int main(int argc, char **argv, char **_junk) {
     int exit_on_sig, exit_val;
+
+    speedy_util_unlimit_core();
 
 #ifdef SPEEDY_PROFILING
     char *runs = getenv("SPEEDY_PROFILE_RUNS");

@@ -36,10 +36,10 @@ use vars qw(@src_generated %write_makefile_common);
 # Turn these off in the distribution
 my $COVERAGE	= 0;	# Compile for coverage testing
 my $PROFILING	= 0;	# Compile for profiling
-my $DEVEL	= 0;	# Compile for gdb
+my $DEVEL	= 0;	# Compile for debugging
 
 # Options to produce warnings
-my $WARNOPTS	= ' -pedantic -Wall ';
+my $WARNOPTS	= ' -pedantic -Wall -W -Wtraditional -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wcast-qual -Wwrite-strings -Wstrict-prototypes -Wredundant-decls -Wnested-externs ';
 
 my $pwd = &pwd;
 use vars qw($OPTIMIZE $LD_OPTS);
