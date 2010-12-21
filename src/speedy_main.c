@@ -149,6 +149,33 @@ static void try_close(const CopyBuf *b) {
     }
 }
 
+static void get_path_to_perl(char* exe_name, size_t exe_name_size)
+{
+    char proc_name[3000];
+    const char* perl = getenv("SPEEDY_PERL");
+
+    memset(proc_name, 0, sizeof(proc_name));
+    memset(exe_name, 0, exe_name_size);
+
+    if (perl && *perl) {
+        strncpy(exe_name, perl, exe_name_size);
+        return;
+    }
+
+    sprintf(proc_name, "/proc/%d/exe", getpid());
+    if (readlink(proc_name, exe_name, exe_name_size) > 0) {
+        sprintf(rindex(exe_name, '/') + 1, "perl");
+        if (access(exe_name, F_OK) == 0)
+            return;
+    }
+
+    sprintf(exe_name, "/usr/local/bin/perl");
+    if (access(exe_name, F_OK) == 0)
+        return;
+    
+    sprintf(exe_name, "perl");
+}
+
 static void doit(const char * const *argv, int *exit_on_sig, int *exit_val)
 {
     PollInfo pi;
@@ -160,6 +187,21 @@ static void doit(const char * const *argv, int *exit_on_sig, int *exit_val)
 
     got_stdout = stop_sock_reads = 0;
 
+    /* Initialize options */
+    DO_OPT_INIT(argv, (const char * const *)environ);
+    if (OPTVAL_MAXRUNS == 1) {
+        char exe_name[3000];
+        char error[3020];
+        int i;
+        char** argv_copy = speedy_opt_perl_argv(NULL);
+        get_path_to_perl(exe_name, sizeof(exe_name));
+
+        execvp(exe_name, argv_copy);
+        sprintf(error, "Unable to exec %s", exe_name);
+        perror(error);
+        exit(1);
+    }
+
     /* Initialize file descriptors */
     fd_init(0, O_RDONLY, STDIN_INITIAL_STATE);
     for (i = 1; i <= 2; ++i)
@@ -168,8 +210,6 @@ static void doit(const char * const *argv, int *exit_on_sig, int *exit_val)
     /* Is stdin a tty? */
     in_is_tty = fd_open(0) ? isatty(0) : 0;
 
-    /* Initialize options */
-    DO_OPT_INIT(argv, (const char * const *)environ);
 
 #   ifdef IAMSUID
 	if (speedy_util_geteuid() == 0) {

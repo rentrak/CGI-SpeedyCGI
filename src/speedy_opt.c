@@ -445,7 +445,7 @@ SPEEDY_INLINE const char *speedy_opt_script_fname(void) {
     return strlist_export(&exec_argv)[script_argv_loc];
 }
 
-#ifdef SPEEDY_BACKEND
+/* #ifdef SPEEDY_BACKEND */
 char **speedy_opt_perl_argv(const char *script_name) {
     static StrList *full_perl_argv, argv_storage;
 
@@ -464,7 +464,7 @@ char **speedy_opt_perl_argv(const char *script_name) {
 
     return strlist_export(full_perl_argv);
 }
-#endif
+/* #endif */
 
 const char * const *speedy_opt_orig_argv(void) {
     return orig_argv;
