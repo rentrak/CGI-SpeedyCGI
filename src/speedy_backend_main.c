@@ -170,6 +170,8 @@ int main(int argc, char **argv, char **_junk) {
     int i;
     SigList sl;
 
+    PERL_SYS_INIT3(&argc, &argv, &_junk);
+
     speedy_util_unlimit_core();
 
     if (!(my_perl = perl_alloc()))

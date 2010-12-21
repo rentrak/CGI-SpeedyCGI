@@ -405,6 +405,7 @@ static void all_done(void) {
 
 	perl_destruct(my_perl);
     }
+    PERL_SYS_TERM();
     speedy_util_exit(0,0);
 }
 
