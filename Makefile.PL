@@ -71,7 +71,7 @@ readable:
 	chmod -R u+w,go-w,go+r .
 
 README: src/SpeedyCGI.pm
-	cd src && $(PERL) -e "use Pod::Text; pod2text(-80)" <SpeedyCGI.pm >../README
+	cd src && pod2text -80 <SpeedyCGI.pm >../README
 
 README.html: src/SpeedyCGI.pm
 	cd src && pod2html SpeedyCGI.pm >../README.html && $(RM_F) pod2h*

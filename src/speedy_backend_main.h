@@ -38,7 +38,7 @@ void * efence_realloc (void *ptr, size_t size);
 
 #else
 
-#define speedy_new(s,n,t)	New(123,s,n,t)
+#define speedy_new(s,n,t)	Newx(s,n,t)
 #define speedy_renew		Renew
 #define speedy_free		Safefree
 
