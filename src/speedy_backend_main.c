@@ -176,6 +176,10 @@ int main(int argc, char **argv, char **_junk) {
         DIE_QUIET("Cannot allocate perl");
     perl_construct(my_perl);
 
+#if defined(PL_use_safe_putenv) || defined(PL_Guse_safe_putenv)
+    PL_use_safe_putenv = 0;
+#endif
+
 #ifdef SPEEDY_DEBUG
     dont_fork = getenv("SPEEDY_NOPARENT") != NULL;
 #endif
