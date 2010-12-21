@@ -83,9 +83,13 @@ static void file_unlock(void) {
 
     FILE_HEAD.lock_owner = 0;
 
+    if (msync(speedy_file_maddr, maplen, MS_SYNC|MS_INVALIDATE)) 
+        speedy_util_die("msync failed"); 
+
     fillin_fl(fl);
     fl.l_type = F_UNLCK;
-    if (fcntl(file_fd, F_SETLK, &fl) == -1) speedy_util_die("unlock file");
+    if (fcntl(file_fd, F_SETLK, &fl) == -1) 
+        speedy_util_die("unlock file");
     file_locked = 0;
 
     speedy_sig_blockall_undo();
