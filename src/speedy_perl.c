@@ -818,7 +818,7 @@ static int onerun(int single_script) {
     my_call_sv(get_perlvar(&PERLVAR_RESET_GLOBALS));
 
     /* Copy option values in from the perl vars */
-    if (SvIV(PERLVAL_OPTS_CHANGED)) {
+    if (SvTRUE(PERLVAL_OPTS_CHANGED)) {
 	int i;
 	for (i = 0; i < SPEEDY_NUMOPTS; ++i) {
 	    OptRec *o = speedy_optdefs + i;
