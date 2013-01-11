@@ -24,7 +24,7 @@ package CGI::SpeedyCGI;
 
 use strict;
 use vars qw($VERSION);
-$VERSION = '2.22';
+$VERSION = '2.23';
 
 ## use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 ## 
