@@ -16,12 +16,12 @@ requires a working copy of "apxs" in your path, Apache with mod_so
 support, and additional Apache configuration.
 
 END
-print "Compile mod_speedycgi (default no)? ";
 
 my @dirs = qw(src speedy_backend speedy);
 my $macro = $write_makefile_common{macro};
 my $apache_module = 0;
-if (<STDIN> =~ /y/i) {
+my $build_apache = prompt("Compile mod_speedycgi (default no)");
+if ($build_apache =~ /y/i) {
     die "ERROR: Command 'apxs -q CC' failed.\n"
 	unless $macro->{APACHE_APXS_WORKS};
     print "Compiling for Apache version $macro->{APACHE_VERSION}\n";

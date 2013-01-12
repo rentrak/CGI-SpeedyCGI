@@ -11,3 +11,5 @@ speedy_backend/MYMETA.yml
 speedy_backend/Makefile
 speedy_backend/speedy.h
 speedy_backend/xsinit.c
+mod_speedycgi2/Makefile
+mod_speedycgi2/t
