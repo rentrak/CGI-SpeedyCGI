@@ -44,6 +44,6 @@ char **speedy_opt_perl_argv(const char *script_name);
 const char * const *speedy_opt_exec_argv(void);
 const char * const *speedy_opt_exec_envp(void);
 const char * const *speedy_opt_orig_argv(void);
-SPEEDY_INLINE const char *speedy_opt_script_fname(void);
+const char *speedy_opt_script_fname(void);
 void speedy_opt_save(void);
 void speedy_opt_restore(void);

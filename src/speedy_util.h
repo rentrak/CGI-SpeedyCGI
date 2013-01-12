@@ -35,25 +35,25 @@ typedef struct {
 } SpeedyBuf;
 
 int speedy_util_pref_fd(int oldfd, int newfd);
-SPEEDY_INLINE int speedy_util_getuid(void);
-SPEEDY_INLINE int speedy_util_geteuid(void);
+int speedy_util_getuid(void);
+int speedy_util_geteuid(void);
 int speedy_util_seteuid(int id);
 int speedy_util_argc(const char * const * argv);
-SPEEDY_INLINE int speedy_util_getpid(void);
+int speedy_util_getpid(void);
 void speedy_util_pid_invalidate(void);
 void speedy_util_die(const char *fmt, ...);
 void speedy_util_die_quiet(const char *fmt, ...);
 int speedy_util_execvp(const char *filename, const char *const *argv);
 char *speedy_util_strndup(const char *s, int len);
-SPEEDY_INLINE int speedy_util_time(void);
-SPEEDY_INLINE void speedy_util_gettimeofday(struct timeval *tv);
+int speedy_util_time(void);
+void speedy_util_gettimeofday(struct timeval *tv);
 void speedy_util_time_invalidate(void);
 char *speedy_util_fname(int num, char type);
 char *speedy_util_getcwd(void);
 SpeedyMapInfo *speedy_util_mapin(int fd, int max_size, int file_size);
 void speedy_util_mapout(SpeedyMapInfo *mi);
-SPEEDY_INLINE SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf);
-SPEEDY_INLINE int speedy_util_open_stat(const char *path, struct stat *stbuf);
+SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf);
+int speedy_util_open_stat(const char *path, struct stat *stbuf);
 void speedy_util_exit(int status, int underbar_exit);
 int speedy_util_kill(pid_t pid, int sig);
 

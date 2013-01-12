@@ -113,7 +113,7 @@ static void file_close2(void) {
 
 
 #ifdef SPEEDY_BACKEND
-SPEEDY_INLINE void speedy_file_fd_is_suspect(void) {
+void speedy_file_fd_is_suspect(void) {
     fd_is_suspect = 1;
 }
 
@@ -297,7 +297,7 @@ static void switch_state(int new_state) {
     }
 }
 
-SPEEDY_INLINE int speedy_file_set_state(int new_state) {
+int speedy_file_set_state(int new_state) {
     int retval = cur_state;
 
     if (new_state != cur_state) {

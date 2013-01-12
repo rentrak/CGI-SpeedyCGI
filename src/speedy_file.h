@@ -49,8 +49,8 @@ typedef struct _file {
 #define FS_CORRUPT	3	/* Locked, mmaped, non-atomic writes to file */
 
 extern speedy_file_t *speedy_file_maddr;
-SPEEDY_INLINE void speedy_file_fd_is_suspect(void);
+void speedy_file_fd_is_suspect(void);
 int speedy_file_size(void);
-SPEEDY_INLINE int speedy_file_set_state(int new_state);
+int speedy_file_set_state(int new_state);
 void speedy_file_need_reopen(void);
 void speedy_file_fork_child(void);

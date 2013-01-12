@@ -41,12 +41,6 @@ typedef long long speedy_ino_t;
 #   define MAP_FAILED (-1)
 #endif
 
-#ifdef __GNUC__
-#define SPEEDY_INLINE __inline__
-#else
-#define SPEEDY_INLINE
-#endif
-
 #ifdef EWOULDBLOCK
 #   define SP_EWOULDBLOCK(e) ((e) == EWOULDBLOCK)
 #else

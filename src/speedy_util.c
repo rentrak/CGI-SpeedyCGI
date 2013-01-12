@@ -55,7 +55,7 @@ static void end_profiling(int dowrites) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_geteuid(void) {
+int speedy_util_geteuid(void) {
     if (my_euid == -1)
 	my_euid = geteuid();
     return my_euid;
@@ -70,7 +70,7 @@ int speedy_util_seteuid(int id) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_getuid(void) {
+int speedy_util_getuid(void) {
     static int uid = -1;
     if (uid == -1)
 	uid = getuid();
@@ -86,7 +86,7 @@ int speedy_util_argc(const char * const * argv) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_getpid(void) {
+int speedy_util_getpid(void) {
     if (!saved_pid) saved_pid = getpid();
     return saved_pid;
 }
@@ -96,13 +96,42 @@ void speedy_util_pid_invalidate(void) {
 }
 
 static void just_die(const char *fmt, va_list ap) {
+   /*
+    * All this strerror_r() stuff is here because
+    * including perl.h in some cases (Perl 5.8?) replaces
+    * strerr() with a wrapper that needs an embedded perl
+    * interpreter running. Otherwise we get SIGSEGV when
+    * accessing interpreter-specific global variables for the
+    * strerror buffer
+    *
+    * Furthermore, there are two implementations of
+    * strerror_r() out there, with different prototypes.
+    */
+
     char buf[2048];
+#ifdef HAS_STRERROR_R
+    char errbuf[256];
+    int errsv;
+#endif
 
     sprintf(buf, "%s[%u]: ", SPEEDY_PROGNAME, (int)getpid());
     vsprintf(buf + strlen(buf), fmt, ap);
     if (errno) {
 	strcat(buf, ": ");
+#ifdef HAS_STRERROR_R
+#ifdef _GNU_SOURCE
+	strcat(buf, strerror_r(errno, errbuf, sizeof(errbuf)));
+#else /* ! _GNU_SOURCE */
+	errsv = errno;
+	if (strerror_r(errsv, errbuf, sizeof(errbuf))
+	    sprintf(buf + strlen(buf), "(errno = %d)", errsv);
+	else
+	    strcat(buf, errbuf);
+	}
+#endif
+#else /* ! HAS_STRERROR_R */
 	strcat(buf, strerror(errno));
+#endif /* HAS_STRERROR_R */
     }
     strcat(buf, "\n");
 #   ifdef SPEEDY_DEBUG
@@ -149,13 +178,13 @@ char *speedy_util_strndup(const char *s, int len) {
     return buf;
 }
 
-SPEEDY_INLINE void speedy_util_gettimeofday(struct timeval *tv) {
+void speedy_util_gettimeofday(struct timeval *tv) {
     if (!saved_time.tv_sec)
 	gettimeofday(&saved_time, NULL);
     *tv = saved_time;
 }
 
-SPEEDY_INLINE int speedy_util_time(void) {
+int speedy_util_time(void) {
     struct timeval tv;
     speedy_util_gettimeofday(&tv);
     return tv.tv_sec;
@@ -261,14 +290,14 @@ SpeedyMapInfo *speedy_util_mapin(int fd, int max_size, int file_size)
     return mi;
 }
 
-SPEEDY_INLINE SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf) {
+SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf) {
     SpeedyDevIno retval;
     retval.d = stbuf->st_dev;
     retval.i = stbuf->st_ino;
     return retval;
 }
 
-SPEEDY_INLINE int speedy_util_open_stat(const char *path, struct stat *stbuf)
+int speedy_util_open_stat(const char *path, struct stat *stbuf)
 {
     int fd = open(path, O_RDONLY);
     if (fd != -1 && fstat(fd, stbuf) == -1) {
