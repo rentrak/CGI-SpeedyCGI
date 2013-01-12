@@ -441,7 +441,7 @@ const char * const *speedy_opt_script_argv(void) {
     return (const char * const *)(strlist_export(&exec_argv) + script_argv_loc);
 }
 
-SPEEDY_INLINE const char *speedy_opt_script_fname(void) {
+const char *speedy_opt_script_fname(void) {
     return strlist_export(&exec_argv)[script_argv_loc];
 }
 

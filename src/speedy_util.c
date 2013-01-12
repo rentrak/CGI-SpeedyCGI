@@ -55,7 +55,7 @@ static void end_profiling(int dowrites) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_geteuid(void) {
+int speedy_util_geteuid(void) {
     if (my_euid == -1)
 	my_euid = geteuid();
     return my_euid;
@@ -70,7 +70,7 @@ int speedy_util_seteuid(int id) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_getuid(void) {
+int speedy_util_getuid(void) {
     static int uid = -1;
     if (uid == -1)
 	uid = getuid();
@@ -86,7 +86,7 @@ int speedy_util_argc(const char * const * argv) {
 }
 #endif
 
-SPEEDY_INLINE int speedy_util_getpid(void) {
+int speedy_util_getpid(void) {
     if (!saved_pid) saved_pid = getpid();
     return saved_pid;
 }
@@ -178,13 +178,13 @@ char *speedy_util_strndup(const char *s, int len) {
     return buf;
 }
 
-SPEEDY_INLINE void speedy_util_gettimeofday(struct timeval *tv) {
+void speedy_util_gettimeofday(struct timeval *tv) {
     if (!saved_time.tv_sec)
 	gettimeofday(&saved_time, NULL);
     *tv = saved_time;
 }
 
-SPEEDY_INLINE int speedy_util_time(void) {
+int speedy_util_time(void) {
     struct timeval tv;
     speedy_util_gettimeofday(&tv);
     return tv.tv_sec;
@@ -290,14 +290,14 @@ SpeedyMapInfo *speedy_util_mapin(int fd, int max_size, int file_size)
     return mi;
 }
 
-SPEEDY_INLINE SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf) {
+SpeedyDevIno speedy_util_stat_devino(const struct stat *stbuf) {
     SpeedyDevIno retval;
     retval.d = stbuf->st_dev;
     retval.i = stbuf->st_ino;
     return retval;
 }
 
-SPEEDY_INLINE int speedy_util_open_stat(const char *path, struct stat *stbuf)
+int speedy_util_open_stat(const char *path, struct stat *stbuf)
 {
     int fd = open(path, O_RDONLY);
     if (fd != -1 && fstat(fd, stbuf) == -1) {
