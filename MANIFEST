@@ -162,3 +162,5 @@ util/slow_cat
 util/test.pl
 util/timeit
 util/timeit.pl
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

@@ -24,7 +24,7 @@ package CGI::SpeedyCGI;
 
 use strict;
 use vars qw($VERSION);
-$VERSION = '2.23';
+$VERSION = '2.24';
 
 ## use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 ## 
@@ -249,6 +249,13 @@ If you are using the optional Apache module, SpeedyCGI options can be
 set in the F<httpd.conf> file.  The name of the apache directive will always
 be Speedy followed by the option name.  For example to set the
 Timeout option, use the apache directive SpeedyTimeout.
+
+Note that these variables are global. There is currently no way to run
+different scripts with different SpeedyCGI options when they are run
+from the Apache module. Any <Directory> or <Location> contexts
+have no effect on the scope of the SpeedyCGI options. When the
+same SpeedyCGI option is set several times, the last one overrides
+the others.
 
 =back
 
